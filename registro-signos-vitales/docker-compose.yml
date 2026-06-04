@@ -1,0 +1,9 @@
+[project]
+name = "backend"
+version = "0.1.0"
+description = "Backend FastAPI para registro de signos vitales - Cruz Roja Argentina"
+requires-python = ">=3.12"
+dependencies = []
+
+[dependency-groups]
+dev = []
