@@ -216,3 +216,13 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Node / React
+node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Base de datos SQLite (se genera en runtime)
+backend/data/
+*.db
+*.db-journal
