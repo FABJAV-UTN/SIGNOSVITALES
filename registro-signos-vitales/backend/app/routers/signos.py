@@ -78,7 +78,7 @@ async def crear_signos(signos_in: SignosCreate, user: dict = Depends(get_current
         persona_id=persona.id,
         operativo_id=operativo.id,
         fecha=signos_in.fecha or date.today(),
-        hora=datetime.utcnow().time(),
+        hora=datetime.now().time().replace(microsecond=0),
         presion_arterial=signos_in.presion_arterial,
         frecuencia_cardiaca=signos_in.frecuencia_cardiaca,
         oxigenacion_sangre=signos_in.oxigenacion_sangre,
@@ -114,9 +114,13 @@ async def cargar_signos_bulk(
             continue
 
         try:
-            presion_arterial, frecuencia_cardiaca, oxigenacion_sangre = [part.strip() for part in row.signos.split("-")]
-            frecuencia_cardiaca = int(frecuencia_cardiaca)
-            oxigenacion_sangre = float(oxigenacion_sangre)
+            partes = [part.strip() for part in row.signos.split("-")]
+            if len(partes) != 3:
+                errores.append(f"Fila {index}: formato de signos inválido (esperado PA-FC-SpO2)")
+                continue
+            presion_arterial = partes[0] if partes[0] else None
+            frecuencia_cardiaca = int(partes[1]) if partes[1] else None
+            oxigenacion_sangre = float(partes[2]) if partes[2] else None
         except Exception:
             errores.append(f"Fila {index}: formato de signos inválido")
             continue

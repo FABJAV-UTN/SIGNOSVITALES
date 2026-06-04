@@ -43,9 +43,9 @@ class OperativoRead(OperativoUpdate):
 
 class SignosCreate(BaseModel):
     dni: constr(pattern=DNI_REGEX)
-    presion_arterial: constr(pattern=PRESION_REGEX)
-    frecuencia_cardiaca: conint(ge=30, le=220)
-    oxigenacion_sangre: confloat(ge=70.0, le=100.0)
+    presion_arterial: Optional[constr(pattern=PRESION_REGEX)] = None
+    frecuencia_cardiaca: Optional[conint(ge=30, le=220)] = None
+    oxigenacion_sangre: Optional[confloat(ge=70.0, le=100.0)] = None
     fecha: Optional[date] = None
     operativo_id: Optional[int] = None
     lugar_custom: Optional[constr(strip_whitespace=True, min_length=3)] = None
@@ -56,9 +56,9 @@ class SignosRead(BaseModel):
     operativo_id: int
     fecha: date
     hora: time
-    presion_arterial: str
-    frecuencia_cardiaca: int
-    oxigenacion_sangre: float
+    presion_arterial: Optional[str] = None
+    frecuencia_cardiaca: Optional[int] = None
+    oxigenacion_sangre: Optional[float] = None
     persona: PersonaRead
     operativo: OperativoRead
 
@@ -126,9 +126,9 @@ class HistorialFilter(BaseModel):
 class SignosRecord(BaseModel):
     fecha: date
     hora: time
-    presion_arterial: str
-    frecuencia_cardiaca: int
-    oxigenacion_sangre: float
+    presion_arterial: Optional[str] = None
+    frecuencia_cardiaca: Optional[int] = None
+    oxigenacion_sangre: Optional[float] = None
     lugar: str
 
     model_config = {"from_attributes": True}

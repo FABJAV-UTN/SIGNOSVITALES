@@ -14,11 +14,22 @@ export default function Historial() {
 
   const datosGrafico = useMemo(
     () =>
-      [...registros].reverse().map((item) => ({
-        fecha: item.fecha,
-        fc: item.frecuencia_cardiaca ?? null,
-        spo2: item.oxigenacion_sangre ?? null,
-      })),
+      [...registros].reverse().map((item) => {
+        let sistolica = null;
+        let diastolica = null;
+        if (item.presion_arterial) {
+          const partes = item.presion_arterial.split("/");
+          sistolica = partes[0] ? parseInt(partes[0]) : null;
+          diastolica = partes[1] ? parseInt(partes[1]) : null;
+        }
+        return {
+          fecha: item.fecha,
+          fc: item.frecuencia_cardiaca ?? null,
+          spo2: item.oxigenacion_sangre ?? null,
+          sistolica,
+          diastolica,
+        };
+      }),
     [registros]
   );
 
@@ -77,12 +88,15 @@ export default function Historial() {
               <LineChart data={datosGrafico}>
                 <CartesianGrid stroke="#E0E0E0" strokeDasharray="3 3" />
                 <XAxis dataKey="fecha" tick={{ fontSize: 11 }} />
-                <YAxis yAxisId="fc" domain={[30, 220]} tickCount={6} tick={{ fontSize: 11 }} label={{ value: "FC", angle: -90, position: "insideLeft", fontSize: 11 }} />
+                <YAxis yAxisId="fc" domain={[40, 220]} tickCount={6} tick={{ fontSize: 11 }} label={{ value: "FC / PA", angle: -90, position: "insideLeft", fontSize: 11 }} />
                 <YAxis yAxisId="spo2" orientation="right" domain={[70, 100]} tickCount={6} tick={{ fontSize: 11 }} label={{ value: "SpO₂", angle: 90, position: "insideRight", fontSize: 11 }} />
+                <YAxis yAxisId="pa" domain={[40, 220]} hide />
                 <Tooltip formatter={(value, name) => [value ?? "—", name]} />
                 <Legend />
                 <Line yAxisId="fc" type="monotone" dataKey="fc" name="FC (lpm)" stroke="#e3000f" strokeWidth={2} dot={{ r: 3 }} connectNulls />
                 <Line yAxisId="spo2" type="monotone" dataKey="spo2" name="SpO₂ (%)" stroke="#17a2b8" strokeWidth={2} dot={{ r: 3 }} connectNulls />
+                <Line yAxisId="pa" type="monotone" dataKey="sistolica" name="PA sistólica" stroke="#f5a623" strokeWidth={2} dot={{ r: 3 }} connectNulls />
+                <Line yAxisId="pa" type="monotone" dataKey="diastolica" name="PA diastólica" stroke="#f0c040" strokeWidth={2} dot={{ r: 3 }} strokeDasharray="4 2" connectNulls />
               </LineChart>
             </ResponsiveContainer>
           </div>
