@@ -22,8 +22,12 @@ async def entregar_kit(kit_in: KitCreate, user: dict = Depends(get_current_user)
     kit = Kit(persona_id=persona.id, tipo=kit_in.tipo, fecha_entrega=date.today())
     db.add(kit)
     await db.commit()
-    await db.refresh(kit)
-    return kit
+    resultado = await db.execute(
+        select(Kit)
+        .options(selectinload(Kit.persona))
+        .where(Kit.id == kit.id)
+    )
+    return resultado.scalar_one()
 
 
 @router.get("/entregas", response_model=list[KitRead], dependencies=[Depends(require_admin)])

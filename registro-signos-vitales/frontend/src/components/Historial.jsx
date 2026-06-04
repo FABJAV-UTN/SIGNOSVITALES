@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from "recharts";
+import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, Legend } from "recharts";
 import api from "../api";
 
 export default function Historial() {
@@ -14,9 +14,10 @@ export default function Historial() {
 
   const datosGrafico = useMemo(
     () =>
-      registros.map((item) => ({
+      [...registros].reverse().map((item) => ({
         fecha: item.fecha,
-        oxigenacion: item.oxigenacion_sangre,
+        fc: item.frecuencia_cardiaca ?? null,
+        spo2: item.oxigenacion_sangre ?? null,
       })),
     [registros]
   );
@@ -65,24 +66,29 @@ export default function Historial() {
         </form>
         {error && <div className="alert alert-error">{error}</div>}
       </section>
+
       <section className="card">
-        <h2>Gráfico de oxigenación</h2>
+        <h2>Gráfico de signos vitales</h2>
         {registros.length === 0 ? (
           <p className="text-muted">No hay registros para mostrar.</p>
         ) : (
           <div className="chart-wrapper">
-            <ResponsiveContainer width="100%" height={250}>
-              <LineChart data={datosGrafico}> 
+            <ResponsiveContainer width="100%" height={280}>
+              <LineChart data={datosGrafico}>
                 <CartesianGrid stroke="#E0E0E0" strokeDasharray="3 3" />
-                <XAxis dataKey="fecha" />
-                <YAxis domain={[70, 100]} />
-                <Tooltip />
-                <Line type="monotone" dataKey="oxigenacion" stroke="#E3000F" strokeWidth={3} dot={{ r: 3 }} />
+                <XAxis dataKey="fecha" tick={{ fontSize: 11 }} />
+                <YAxis yAxisId="fc" domain={[30, 220]} tickCount={6} tick={{ fontSize: 11 }} label={{ value: "FC", angle: -90, position: "insideLeft", fontSize: 11 }} />
+                <YAxis yAxisId="spo2" orientation="right" domain={[70, 100]} tickCount={6} tick={{ fontSize: 11 }} label={{ value: "SpO₂", angle: 90, position: "insideRight", fontSize: 11 }} />
+                <Tooltip formatter={(value, name) => [value ?? "—", name]} />
+                <Legend />
+                <Line yAxisId="fc" type="monotone" dataKey="fc" name="FC (lpm)" stroke="#e3000f" strokeWidth={2} dot={{ r: 3 }} connectNulls />
+                <Line yAxisId="spo2" type="monotone" dataKey="spo2" name="SpO₂ (%)" stroke="#17a2b8" strokeWidth={2} dot={{ r: 3 }} connectNulls />
               </LineChart>
             </ResponsiveContainer>
           </div>
         )}
       </section>
+
       <section className="card table-card">
         <h2>Registros recientes</h2>
         {registros.length === 0 ? (
@@ -105,10 +111,10 @@ export default function Historial() {
                   <tr key={registro.id}>
                     <td>{registro.fecha}</td>
                     <td>{registro.hora}</td>
-                    <td>{registro.operativo?.lugar || "-"}</td>
-                    <td>{registro.presion_arterial}</td>
-                    <td>{registro.frecuencia_cardiaca}</td>
-                    <td>{registro.oxigenacion_sangre}</td>
+                    <td>{registro.operativo?.lugar || "—"}</td>
+                    <td>{registro.presion_arterial ?? "—"}</td>
+                    <td>{registro.frecuencia_cardiaca ?? "—"}</td>
+                    <td>{registro.oxigenacion_sangre ?? "—"}</td>
                   </tr>
                 ))}
               </tbody>

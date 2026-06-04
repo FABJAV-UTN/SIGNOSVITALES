@@ -37,7 +37,7 @@ class RegistroSignosVitales(Base):
     persona_id = Column(Integer, ForeignKey("personas.id"), nullable=False)
     operativo_id = Column(Integer, ForeignKey("operativos.id"), nullable=False)
     fecha = Column(Date, nullable=False, default=date.today)
-    hora = Column(Time, nullable=False, default=datetime.utcnow().time)
+    hora = Column(Time, nullable=False, default=lambda: datetime.now().time().replace(microsecond=0))
     presion_arterial = Column(String(16), nullable=False)
     frecuencia_cardiaca = Column(Integer, nullable=False)
     oxigenacion_sangre = Column(Float, nullable=False)

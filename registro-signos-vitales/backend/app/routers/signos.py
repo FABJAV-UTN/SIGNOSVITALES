@@ -85,8 +85,15 @@ async def crear_signos(signos_in: SignosCreate, user: dict = Depends(get_current
     )
     db.add(registro)
     await db.commit()
-    await db.refresh(registro)
-    return registro
+    resultado = await db.execute(
+        select(RegistroSignosVitales)
+        .options(
+            selectinload(RegistroSignosVitales.persona),
+            selectinload(RegistroSignosVitales.operativo),
+        )
+        .where(RegistroSignosVitales.id == registro.id)
+    )
+    return resultado.scalar_one()
 
 
 @router.post("/bulk", response_model=SignosBulkResponse, status_code=201)
@@ -154,7 +161,7 @@ async def cargar_signos_bulk(
             persona_id=persona.id,
             operativo_id=operativo.id,
             fecha=row.fecha,
-            hora=datetime.utcnow().time(),
+            hora=datetime.now().time().replace(microsecond=0),
             presion_arterial=presion_arterial,
             frecuencia_cardiaca=frecuencia_cardiaca,
             oxigenacion_sangre=oxigenacion_sangre,

@@ -12,6 +12,8 @@ services:
     restart: unless-stopped
     networks:
       - vital-net
+    environment:
+      - TZ=America/Argentina/Buenos_Aires
 
   frontend:
     build:
