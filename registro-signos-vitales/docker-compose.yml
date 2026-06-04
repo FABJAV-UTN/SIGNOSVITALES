@@ -1,9 +1,31 @@
-[project]
-name = "backend"
-version = "0.1.0"
-description = "Backend FastAPI para registro de signos vitales - Cruz Roja Argentina"
-requires-python = ">=3.12"
-dependencies = []
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      network: host
+    container_name: vital_backend
+    volumes:
+      - ./backend/data:/app/data
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    networks:
+      - vital-net
 
-[dependency-groups]
-dev = []
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: vital_frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - vital-net
+
+networks:
+  vital-net:
+    driver: bridge
