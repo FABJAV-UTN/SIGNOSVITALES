@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import api from "../api";
 import { useAuth } from "./AuthContext";
@@ -11,14 +11,12 @@ export default function BuscarPersona() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  async function buscar(event) {
-    if (event) event.preventDefault();
+  const buscarPersonas = useCallback(async (valor = "") => {
     setError("");
-    setSeleccionada(null);
     setLoading(true);
     try {
       const response = await api.get("/personas", {
-        params: { q: query.trim() || undefined },
+        params: { q: valor.trim() || undefined },
       });
       setResultados(response.data);
     } catch (err) {
@@ -27,7 +25,15 @@ export default function BuscarPersona() {
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      buscarPersonas(query);
+    }, 150);
+
+    return () => clearTimeout(timeout);
+  }, [query, buscarPersonas]);
 
   const [kitsPersona, setKitsPersona] = useState([]);
   const [loadingKits, setLoadingKits] = useState(false);
@@ -54,11 +60,16 @@ export default function BuscarPersona() {
     }
   }
 
+  function handleBuscar(event) {
+    event.preventDefault();
+    buscarPersonas(query);
+  }
+
   return (
     <main className="page-shell">
       <section className="card card-form">
         <h1>Buscar persona</h1>
-        <form onSubmit={buscar}>
+        <form onSubmit={handleBuscar}>
           <label>
             DNI o nombre/apellido
             <input
@@ -76,7 +87,9 @@ export default function BuscarPersona() {
 
       <section className="card table-card">
         <h2>Resultados</h2>
-        {resultados.length === 0 ? (
+        {loading && resultados.length === 0 ? (
+          <p className="text-muted">Cargando personas...</p>
+        ) : resultados.length === 0 ? (
           <p className="text-muted">No se encontraron personas.</p>
         ) : (
           <div className="table-scroll">
@@ -87,25 +100,20 @@ export default function BuscarPersona() {
                   <th>Apellido</th>
                   <th>DNI</th>
                   <th>Género</th>
-                  <th>Acción</th>
                 </tr>
               </thead>
               <tbody>
                 {resultados.map((persona) => (
-                  <tr key={persona.id}>
+                  <tr
+                    key={persona.id}
+                    className="persona-row"
+                    onClick={() => seleccionarPersona(persona.dni)}
+                    style={{ cursor: "pointer" }}
+                  >
                     <td>{persona.nombre}</td>
                     <td>{persona.apellido}</td>
                     <td>{persona.dni}</td>
                     <td>{persona.genero || "-"}</td>
-                    <td>
-                      <button
-                        type="button"
-                        className="button button-primary"
-                        onClick={() => seleccionarPersona(persona.dni)}
-                      >
-                        Ver
-                      </button>
-                    </td>
                   </tr>
                 ))}
               </tbody>

@@ -243,6 +243,10 @@ td {
   border-bottom: 1px solid var(--border);
 }
 
+.persona-row:hover {
+  background: rgba(227, 0, 15, 0.04);
+}
+
 @media (max-width: 768px) {
   .navbar-menu {
     display: none;
