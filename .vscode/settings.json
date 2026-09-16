@@ -1,0 +1,8 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "/^which node \\|\\| true; which npm \\|\\| true; node --version \\|\\| true; npm --version \\|\\| true; git remote -v \\|\\| true$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}
