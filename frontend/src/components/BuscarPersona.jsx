@@ -12,16 +12,18 @@ export default function BuscarPersona() {
   const [error, setError] = useState("");
 
   async function buscar(event) {
-    event.preventDefault();
+    if (event) event.preventDefault();
     setError("");
     setSeleccionada(null);
-    setResultados([]);
     setLoading(true);
     try {
-      const response = await api.get(`/personas?q=${encodeURIComponent(query)}`);
+      const response = await api.get("/personas", {
+        params: { q: query.trim() || undefined },
+      });
       setResultados(response.data);
     } catch (err) {
       setError("No se pudo buscar la persona.");
+      setResultados([]);
     } finally {
       setLoading(false);
     }
@@ -59,7 +61,11 @@ export default function BuscarPersona() {
         <form onSubmit={buscar}>
           <label>
             DNI o nombre/apellido
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Ej. 12345678 o Juan" required />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Ej. 12345678 o Juan"
+            />
           </label>
           <button type="submit" className="button button-primary" disabled={loading}>
             {loading ? "Buscando..." : "Buscar"}
@@ -67,22 +73,51 @@ export default function BuscarPersona() {
         </form>
         {error && <div className="alert alert-error">{error}</div>}
       </section>
-      <section className="card">
+
+      <section className="card table-card">
         <h2>Resultados</h2>
         {resultados.length === 0 ? (
-          <p className="text-muted">Ingrese un término y presione Buscar.</p>
+          <p className="text-muted">No se encontraron personas.</p>
         ) : (
-          <div className="list-card">
-            {resultados.map((persona) => (
-              <button key={persona.id} className="item-button" onClick={() => seleccionarPersona(persona.dni)}>
-                {persona.nombre} {persona.apellido} • {persona.dni}
-              </button>
-            ))}
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Nombre</th>
+                  <th>Apellido</th>
+                  <th>DNI</th>
+                  <th>Género</th>
+                  <th>Acción</th>
+                </tr>
+              </thead>
+              <tbody>
+                {resultados.map((persona) => (
+                  <tr key={persona.id}>
+                    <td>{persona.nombre}</td>
+                    <td>{persona.apellido}</td>
+                    <td>{persona.dni}</td>
+                    <td>{persona.genero || "-"}</td>
+                    <td>
+                      <button
+                        type="button"
+                        className="button button-primary"
+                        onClick={() => seleccionarPersona(persona.dni)}
+                      >
+                        Ver
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
+
         {seleccionada && (
           <div className="info-card">
-            <h3>{seleccionada.nombre} {seleccionada.apellido}</h3>
+            <h3>
+              {seleccionada.nombre} {seleccionada.apellido}
+            </h3>
             <p>DNI: {seleccionada.dni}</p>
             <p>Género: {seleccionada.genero || "No informado"}</p>
             <p>Fecha nacimiento: {seleccionada.fecha_nacimiento || "No informado"}</p>

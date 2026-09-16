@@ -25,13 +25,14 @@ async def crear_persona(persona_in: PersonaCreate, db: AsyncSession = Depends(ge
 
 
 @router.get("", response_model=list[PersonaRead])
-async def listar_personas(q: str | None = Query(None, min_length=1), db: AsyncSession = Depends(get_session)):
+async def listar_personas(q: str | None = Query(None), db: AsyncSession = Depends(get_session)):
     consulta = select(Persona)
-    if q:
-        filtro = f"%{q}%"
-        dni_clean = re.sub(r"[\s.-]", "", q.strip())
+    if q and q.strip():
+        termino = q.strip()
+        filtro = f"%{termino}%"
+        dni_clean = re.sub(r"[\s.-]", "", termino)
         consulta = consulta.where(
-            or_(Persona.dni == q, Persona.dni == dni_clean, Persona.nombre.ilike(filtro), Persona.apellido.ilike(filtro))
+            or_(Persona.dni == termino, Persona.dni == dni_clean, Persona.nombre.ilike(filtro), Persona.apellido.ilike(filtro))
         )
     consulta = consulta.order_by(Persona.apellido, Persona.nombre)
     resultado = await db.execute(consulta)
