@@ -226,3 +226,4 @@ frontend/.vite/
 backend/data/
 *.db
 *.db-journal
+informes/
