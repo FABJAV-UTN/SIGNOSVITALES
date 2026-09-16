@@ -8,6 +8,7 @@ import BuscarPersona from "./components/BuscarPersona";
 import RegistrarSignos from "./components/RegistrarSignos";
 import ConfigurarOperativo from "./components/ConfigurarOperativo";
 import EntregarKit from "./components/EntregarKit";
+import HistorialKits from "./components/HistorialKits";
 import Historial from "./components/Historial";
 import CargaMasivaSignos from "./components/CargaMasivaSignos";
 import "./App.css";
@@ -83,6 +84,14 @@ function AppRoutes() {
           element={
             <ProtectedRoute>
               <EntregarKit />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/kits/historial"
+          element={
+            <ProtectedRoute>
+              <HistorialKits />
             </ProtectedRoute>
           }
         />

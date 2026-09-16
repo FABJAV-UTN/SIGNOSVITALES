@@ -10,6 +10,7 @@ const navItems = [
   { path: "/signos/carga-masiva", label: "Carga Masiva" },
   { path: "/operativo/config", label: "Operativo" },
   { path: "/kits/entregar", label: "Entregar Kit" },
+  { path: "/kits/historial", label: "Historial Kits" },
 ];
 
 export default function Navbar() {

@@ -10,7 +10,7 @@ class Persona(Base):
     id = Column(Integer, primary_key=True, index=True)
     nombre = Column(String(120), nullable=False)
     apellido = Column(String(120), nullable=False)
-    dni = Column(String(8), unique=True, nullable=False, index=True)
+    dni = Column(String(12), unique=True, nullable=False, index=True)
     fecha_nacimiento = Column(Date, nullable=True)
     genero = Column(String(40), nullable=True)
     situacion_de_calle = Column(Boolean, default=False, nullable=False)

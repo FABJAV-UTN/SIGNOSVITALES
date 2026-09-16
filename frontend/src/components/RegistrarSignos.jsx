@@ -49,10 +49,10 @@ export default function RegistrarSignos() {
     setLoading(true);
     try {
       await api.post("/signos", {
-        dni,
-        presion_arterial: presion,
-        frecuencia_cardiaca: Number(fc),
-        oxigenacion_sangre: Number(spo2),
+        dni: dni.trim(),
+        presion_arterial: presion.trim() || null,
+        frecuencia_cardiaca: fc !== "" ? Number(fc) : null,
+        oxigenacion_sangre: spo2 !== "" ? Number(spo2) : null,
       });
       setMessage("Registro de signos guardado con éxito.");
       setPresion("");
@@ -60,7 +60,14 @@ export default function RegistrarSignos() {
       setSpo2("");
       setTimeout(() => navigate("/dashboard"), 1200);
     } catch (err) {
-      setError(err.response?.data?.detail || "No se pudo guardar el registro." );
+      const detail = err.response?.data?.detail;
+      if (Array.isArray(detail)) {
+        setError(detail.map((e) => (e.loc ? `${e.loc[e.loc.length - 1]}: ${e.msg}` : e.msg)).join(" — "));
+      } else if (typeof detail === "string") {
+        setError(detail);
+      } else {
+        setError("No se pudo guardar el registro.");
+      }
     } finally {
       setLoading(false);
     }

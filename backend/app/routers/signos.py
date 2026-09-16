@@ -43,8 +43,11 @@ async def _resolve_operativo(operativo_id: Optional[int], lugar_custom: Optional
 
 async def _find_persona_by_identificador(identifier: str, db: AsyncSession) -> Persona:
     identifier = identifier.strip()
-    if re.fullmatch(r"^\d{7,8}$", identifier):
-        persona_res = await db.execute(select(Persona).where(Persona.dni == identifier))
+    identifier_clean = re.sub(r"[\s.-]", "", identifier)
+    if re.fullmatch(r"^\d{6,9}$", identifier_clean):
+        persona_res = await db.execute(
+            select(Persona).where(or_(Persona.dni == identifier, Persona.dni == identifier_clean))
+        )
         return persona_res.scalar_one_or_none()
 
     if " " not in identifier:

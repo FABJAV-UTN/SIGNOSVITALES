@@ -1,3 +1,4 @@
+import re
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,8 +29,9 @@ async def listar_personas(q: str | None = Query(None, min_length=1), db: AsyncSe
     consulta = select(Persona)
     if q:
         filtro = f"%{q}%"
+        dni_clean = re.sub(r"[\s.-]", "", q.strip())
         consulta = consulta.where(
-            or_(Persona.dni == q, Persona.nombre.ilike(filtro), Persona.apellido.ilike(filtro))
+            or_(Persona.dni == q, Persona.dni == dni_clean, Persona.nombre.ilike(filtro), Persona.apellido.ilike(filtro))
         )
     consulta = consulta.order_by(Persona.apellido, Persona.nombre)
     resultado = await db.execute(consulta)
@@ -38,7 +40,8 @@ async def listar_personas(q: str | None = Query(None, min_length=1), db: AsyncSe
 
 @router.get("/{dni}", response_model=PersonaRead)
 async def obtener_persona(dni: str, db: AsyncSession = Depends(get_session)):
-    resultado = await db.execute(select(Persona).where(Persona.dni == dni))
+    dni_clean = re.sub(r"[\s.-]", "", dni.strip())
+    resultado = await db.execute(select(Persona).where(or_(Persona.dni == dni, Persona.dni == dni_clean)))
     persona = resultado.scalar_one_or_none()
     if not persona:
         raise HTTPException(status_code=404, detail="Persona no encontrada")
@@ -47,7 +50,8 @@ async def obtener_persona(dni: str, db: AsyncSession = Depends(get_session)):
 
 @router.get("/{dni}/historial", response_model=list[SignosRead], dependencies=[Depends(require_admin)])
 async def historial_persona(dni: str, db: AsyncSession = Depends(get_session)):
-    persona_query = await db.execute(select(Persona).where(Persona.dni == dni))
+    dni_clean = re.sub(r"[\s.-]", "", dni.strip())
+    persona_query = await db.execute(select(Persona).where(or_(Persona.dni == dni, Persona.dni == dni_clean)))
     persona = persona_query.scalar_one_or_none()
     if not persona:
         raise HTTPException(status_code=404, detail="Persona no encontrada")

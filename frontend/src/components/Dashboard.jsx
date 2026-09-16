@@ -24,6 +24,9 @@ export default function Dashboard() {
           <Link to="/kits/entregar" className="card-action">
             Entregar kit
           </Link>
+          <Link to="/kits/historial" className="card-action">
+            Historial de kits
+          </Link>
           {isAdmin && (
             <Link to="/historial" className="card-action">
               Historial administrativo

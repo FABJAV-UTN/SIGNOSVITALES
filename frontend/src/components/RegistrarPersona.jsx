@@ -25,17 +25,24 @@ export default function RegistrarPersona() {
     setLoading(true);
     try {
       await api.post("/personas", {
-        nombre,
-        apellido,
-        dni,
+        nombre: nombre.trim(),
+        apellido: apellido.trim(),
+        dni: dni.trim(),
         fecha_nacimiento: fecha_nacimiento || null,
-        genero: genero || null,
+        genero: genero.trim() || null,
         situacion_de_calle: situacionDeCalle,
       });
       setMessage("Persona registrada con éxito.");
       setTimeout(() => navigate("/personas/buscar"), 1000);
     } catch (err) {
-      setError(err.response?.data?.detail || "No se pudo registrar la persona.");
+      const detail = err.response?.data?.detail;
+      if (Array.isArray(detail)) {
+        setError(detail.map((e) => (e.loc ? `${e.loc[e.loc.length - 1]}: ${e.msg}` : e.msg)).join(" — "));
+      } else if (typeof detail === "string") {
+        setError(detail);
+      } else {
+        setError("No se pudo registrar la persona.");
+      }
     } finally {
       setLoading(false);
     }

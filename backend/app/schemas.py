@@ -1,10 +1,11 @@
 from datetime import date, datetime, time
 from enum import Enum
+import re
 from typing import Any, List, Optional
 
 from pydantic import BaseModel, Field, ValidationError, conint, constr, confloat, field_validator, model_validator
 
-DNI_REGEX = r"^\d{7,8}$"
+DNI_REGEX = r"^\d{6,9}$"
 PRESION_REGEX = r"^\d{2,3}/\d{2,3}$"
 
 class LoginRequest(BaseModel):
@@ -21,8 +22,30 @@ class PersonaCreate(BaseModel):
     apellido: constr(strip_whitespace=True, min_length=2)
     dni: constr(pattern=DNI_REGEX)
     fecha_nacimiento: Optional[date] = None
-    genero: Optional[constr(strip_whitespace=True, min_length=2)] = None
+    genero: Optional[str] = None
     situacion_de_calle: bool = False
+
+    @field_validator("dni", mode="before")
+    @classmethod
+    def clean_dni(cls, v: Any) -> str:
+        if isinstance(v, str):
+            return re.sub(r"[\s.-]", "", v.strip())
+        return str(v) if v is not None else ""
+
+    @field_validator("fecha_nacimiento", mode="before")
+    @classmethod
+    def clean_fecha(cls, v: Any) -> Any:
+        if v == "" or v is None:
+            return None
+        return v
+
+    @field_validator("genero", mode="before")
+    @classmethod
+    def clean_genero(cls, v: Any) -> Optional[str]:
+        if isinstance(v, str):
+            val = v.strip()
+            return val if val else None
+        return v
 
 class PersonaRead(PersonaCreate):
     id: int
@@ -49,6 +72,35 @@ class SignosCreate(BaseModel):
     fecha: Optional[date] = None
     operativo_id: Optional[int] = None
     lugar_custom: Optional[constr(strip_whitespace=True, min_length=3)] = None
+
+    @field_validator("dni", mode="before")
+    @classmethod
+    def clean_dni(cls, v: Any) -> str:
+        if isinstance(v, str):
+            return re.sub(r"[\s.-]", "", v.strip())
+        return str(v) if v is not None else ""
+
+    @field_validator("presion_arterial", mode="before")
+    @classmethod
+    def clean_presion(cls, v: Any) -> Optional[str]:
+        if isinstance(v, str):
+            val = v.strip()
+            return val if val else None
+        return v
+
+    @field_validator("frecuencia_cardiaca", mode="before")
+    @classmethod
+    def clean_fc(cls, v: Any) -> Optional[int]:
+        if v == "" or v is None or v == 0:
+            return None
+        return v
+
+    @field_validator("oxigenacion_sangre", mode="before")
+    @classmethod
+    def clean_spo2(cls, v: Any) -> Optional[float]:
+        if v == "" or v is None or v == 0 or v == 0.0:
+            return None
+        return v
 
 class SignosRead(BaseModel):
     id: int
@@ -92,6 +144,13 @@ class SignosBulkResponse(BaseModel):
 class KitCreate(BaseModel):
     dni: constr(pattern=DNI_REGEX)
     tipo: constr(strip_whitespace=True, min_length=1)
+
+    @field_validator("dni", mode="before")
+    @classmethod
+    def clean_dni(cls, v: Any) -> str:
+        if isinstance(v, str):
+            return re.sub(r"[\s.-]", "", v.strip())
+        return str(v) if v is not None else ""
 
     @field_validator("tipo")
     @classmethod
