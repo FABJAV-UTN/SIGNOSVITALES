@@ -1,4 +1,4 @@
-# Registro de Signos Vitales - Cruz Roja Argentina
+# SISVAP - Cruz Roja Argentina
 
 Sistema web para voluntarios que registran signos vitales de personas en situación de calle y familias carenciadas.
 
