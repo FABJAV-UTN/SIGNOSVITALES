@@ -1,7 +1,12 @@
+import os
+
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
-SQLALCHEMY_DATABASE_URL = "sqlite+aiosqlite:///./data/signos_vitales.db"
+SQLALCHEMY_DATABASE_URL = os.getenv(
+    "SIGNOS_VITALES_DB_URL",
+    "sqlite+aiosqlite:///./data/signos_vitales.db",
+)
 
 engine = create_async_engine(SQLALCHEMY_DATABASE_URL, future=True, echo=False)
 AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)

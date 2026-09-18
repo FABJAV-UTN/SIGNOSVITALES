@@ -6,6 +6,7 @@ const navItems = [
   { path: "/dashboard", label: "Inicio" },
   { path: "/personas/buscar", label: "Buscar Persona" },
   { path: "/personas/nueva", label: "Nueva Persona" },
+  { path: "/personas/carga-masiva", label: "Carga Masiva de Personas" },
   { path: "/signos/registrar", label: "Registrar Signos" },
   { path: "/signos/carga-masiva", label: "Carga Masiva" },
   { path: "/operativo/config", label: "Operativo" },

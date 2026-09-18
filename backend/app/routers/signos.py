@@ -1,5 +1,6 @@
 from datetime import date, datetime, time
 import re
+import unicodedata
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -41,6 +42,11 @@ async def _resolve_operativo(operativo_id: Optional[int], lugar_custom: Optional
     return operativo
 
 
+def _normalize_name(value: str) -> str:
+    normalized = unicodedata.normalize("NFD", value.casefold())
+    return "".join(ch for ch in normalized if unicodedata.category(ch) != "Mn").strip()
+
+
 async def _find_persona_by_identificador(identifier: str, db: AsyncSession) -> Persona:
     identifier = identifier.strip()
     identifier_clean = re.sub(r"[\s.-]", "", identifier)
@@ -50,23 +56,22 @@ async def _find_persona_by_identificador(identifier: str, db: AsyncSession) -> P
         )
         return persona_res.scalar_one_or_none()
 
-    if " " not in identifier:
+    parts = [part.strip() for part in re.split(r"\s+", identifier) if part.strip()]
+    if len(parts) < 2:
         raise HTTPException(status_code=400, detail="El identificador debe ser DNI o Nombre y Apellido completos.")
 
-    parts = [part.strip() for part in identifier.split(" ") if part.strip()]
-    if len(parts) < 2:
-        raise HTTPException(status_code=400, detail="El identificador debe incluir Nombre y Apellido.")
-    nombre = parts[0]
+    nombre = " ".join(parts[:-1])
     apellido = parts[-1]
-    persona_res = await db.execute(
-        select(Persona).where(
-            and_(Persona.nombre.ilike(nombre), Persona.apellido.ilike(apellido))
-        )
-    )
+    persona_res = await db.execute(select(Persona))
     personas = persona_res.scalars().all()
-    if len(personas) > 1:
+    matches = [
+        persona for persona in personas
+        if _normalize_name(persona.nombre) == _normalize_name(nombre)
+        and _normalize_name(persona.apellido) == _normalize_name(apellido)
+    ]
+    if len(matches) > 1:
         raise HTTPException(status_code=400, detail="Identificador ambiguo: existe más de una persona con ese nombre y apellido.")
-    return personas[0] if personas else None
+    return matches[0] if matches else None
 
 
 @router.post("", response_model=SignosRead, status_code=201)
@@ -109,6 +114,12 @@ async def cargar_signos_bulk(
     errores: list[str] = []
 
     for index, raw_row in enumerate(bulk_request.rows, start=1):
+        if raw_row is None or (isinstance(raw_row, dict) and not any(
+            value is not None and str(value).strip() != "" for value in raw_row.values()
+        )):
+            errores.append(f"Fila {index}: fila vacía o sin datos suficientes")
+            continue
+
         try:
             row = SignosBulkRow.model_validate(raw_row)
         except ValidationError as exc:
@@ -121,9 +132,9 @@ async def cargar_signos_bulk(
             if len(partes) != 3:
                 errores.append(f"Fila {index}: formato de signos inválido (esperado PA-FC-SpO2)")
                 continue
-            presion_arterial = partes[0] if partes[0] else None
-            frecuencia_cardiaca = int(partes[1]) if partes[1] else None
-            oxigenacion_sangre = float(partes[2]) if partes[2] else None
+            presion_arterial = partes[0] if partes[0] else "0/0"
+            frecuencia_cardiaca = int(partes[1]) if partes[1] else 0
+            oxigenacion_sangre = float(partes[2]) if partes[2] else 0.0
         except Exception:
             errores.append(f"Fila {index}: formato de signos inválido")
             continue

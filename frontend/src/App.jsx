@@ -11,6 +11,7 @@ import EntregarKit from "./components/EntregarKit";
 import HistorialKits from "./components/HistorialKits";
 import Historial from "./components/Historial";
 import CargaMasivaSignos from "./components/CargaMasivaSignos";
+import CargaMasivaPersonas from "./components/CargaMasivaPersonas";
 import "./App.css";
 
 function ProtectedRoute({ children }) {
@@ -60,6 +61,14 @@ function AppRoutes() {
           element={
             <ProtectedRoute>
               <RegistrarSignos />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/personas/carga-masiva"
+          element={
+            <ProtectedRoute>
+              <CargaMasivaPersonas />
             </ProtectedRoute>
           }
         />
