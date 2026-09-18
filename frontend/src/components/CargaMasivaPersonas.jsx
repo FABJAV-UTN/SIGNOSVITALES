@@ -12,43 +12,22 @@ const normalizeHeader = (value) =>
     .replace(/[_\s]+/g, " ");
 
 const HEADER_ALIASES = {
-  identificador: [
-    "identificador",
-    "dni",
-    "persona",
-    "nombre apellido",
-    "nombre_apellido",
-    "nombre y apellido",
-  ],
-  fecha: ["fecha", "date"],
-  presion_arterial: [
-    "presion arterial",
-    "presion_arterial",
-    "presion",
-    "presionarterial",
-    "presionarterial",
-  ],
-  frecuencia_cardiaca: [
-    "frecuencia cardiaca",
-    "frecuencia_cardiaca",
-    "frecuencia",
-    "fc",
-  ],
-  oxigenacion_sangre: [
-    "oxigenacion",
-    "oxigenacion sangre",
-    "oxigenacion_sangre",
-    "oxigenacionen sangre",
-    "spo2",
-    "saturacion",
-    "saturacion de oxigeno",
-  ],
-  operativo_id: ["operativo_id", "operativo id", "operativo"],
-  lugar_custom: ["lugar_custom", "lugar custom", "lugar"],
+  nombre: ["nombre", "nombres", "first name", "first_name"],
+  apellido: ["apellido", "apellidos", "last name", "last_name", "surname"],
+  dni: ["dni", "documento", "documento nro", "documento_nro", "dni nro"],
+  fecha_nacimiento: ["fecha nacimiento", "fecha_nacimiento", "nacimiento", "fecha de nacimiento"],
+  genero: ["genero", "sexo", "sex"],
+  situacion_de_calle: ["situacion de calle", "situacion_de_calle", "situacion calle", "calle"],
 };
 
 const findHeaderKey = (normalizedHeader) => {
-  return Object.entries(HEADER_ALIASES).find(([key, aliases]) => aliases.includes(normalizedHeader))?.[0];
+  return Object.entries(HEADER_ALIASES).find(([_, aliases]) => aliases.includes(normalizedHeader))?.[0];
+};
+
+const parseBooleanValue = (value) => {
+  if (value === null || value === undefined || value === "") return false;
+  const text = value.toString().trim().toLowerCase();
+  return ["true", "1", "si", "sí", "yes", "s", "y"].includes(text);
 };
 
 const formatExcelDate = (value) => {
@@ -100,6 +79,13 @@ const formatExcelDate = (value) => {
     return `${year}-${String(Number(month)).padStart(2, "0")}-${String(Number(day)).padStart(2, "0")}`;
   }
 
+  const out = compact.match(/^(\d{1,2})\s*\/\s*(\d{1,2})\s*\/\s*(\d{2,4})$/);
+  if (out) {
+    const [, day, month, yearRaw] = out;
+    const year = yearRaw.length === 2 ? (Number(yearRaw) < 50 ? 2000 + Number(yearRaw) : 1900 + Number(yearRaw)) : Number(yearRaw);
+    return `${year}-${String(Number(month)).padStart(2, "0")}-${String(Number(day)).padStart(2, "0")}`;
+  }
+
   const parsed = new Date(compact);
   if (!Number.isNaN(parsed.getTime())) {
     return toIsoDate(parsed);
@@ -108,17 +94,34 @@ const formatExcelDate = (value) => {
   return compact;
 };
 
-export default function CargaMasivaSignos() {
+const formatExcelValue = (value) => {
+  if (value === null || value === undefined || value === "") {
+    return "";
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString().slice(0, 10);
+  }
+
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value.toString();
+  }
+
+  return value.toString().trim();
+};
+
+export default function CargaMasivaPersonas() {
   const [payload, setPayload] = useState(
     JSON.stringify(
       {
-        operativo_id: null,
-        lugar_custom: null,
         rows: [
           {
-            identificador: "12345678",
-            signos: "120/80-75-98.5",
-            fecha: "2026-06-04",
+            nombre: "Juan",
+            apellido: "Pérez",
+            dni: "12345678",
+            fecha_nacimiento: "1990-05-10",
+            genero: "Masculino",
+            situacion_de_calle: false,
           },
         ],
       },
@@ -133,6 +136,7 @@ export default function CargaMasivaSignos() {
   const [error, setError] = useState("");
   const [errores, setErrores] = useState([]);
   const [okCount, setOkCount] = useState(null);
+  const [totalRows, setTotalRows] = useState(null);
 
   const handleFileChange = async (event) => {
     setFileError("");
@@ -165,30 +169,37 @@ export default function CargaMasivaSignos() {
           }
         });
 
-        const requiredColumns = ["identificador", "fecha", "presion_arterial", "frecuencia_cardiaca", "oxigenacion_sangre"];
+        const requiredColumns = ["nombre", "apellido", "dni"];
         const missing = requiredColumns.filter((column) => !keyMap[column]);
         if (missing.length > 0) {
           throw new Error(`Faltan columnas en el archivo: ${missing.join(", ")}`);
         }
 
         const rows = filteredRows.map((rawRow) => {
-          const identificador = rawRow[keyMap.identificador]?.toString().trim();
-          const fecha = formatExcelDate(rawRow[keyMap.fecha]);
-          const presion_arterial = rawRow[keyMap.presion_arterial]?.toString().trim();
-          const frecuencia_cardiaca = rawRow[keyMap.frecuencia_cardiaca]?.toString().trim();
-          const oxigenacion_sangre = rawRow[keyMap.oxigenacion_sangre]?.toString().trim();
-          const operativo_id = keyMap.operativo_id ? rawRow[keyMap.operativo_id] : null;
-          const lugar_custom = keyMap.lugar_custom ? rawRow[keyMap.lugar_custom]?.toString().trim() : null;
+          const nombre = formatExcelValue(rawRow[keyMap.nombre])
+            ?.replace(/\s+/g, " ")
+            .trim();
+          const apellido = formatExcelValue(rawRow[keyMap.apellido])
+            ?.replace(/\s+/g, " ")
+            .trim();
+          const dni = formatExcelValue(rawRow[keyMap.dni]);
+          const fecha_nacimiento = keyMap.fecha_nacimiento ? formatExcelDate(rawRow[keyMap.fecha_nacimiento]) : "";
+          const genero = keyMap.genero ? formatExcelValue(rawRow[keyMap.genero]) : "";
+          const situacion_de_calle = keyMap.situacion_de_calle
+            ? parseBooleanValue(rawRow[keyMap.situacion_de_calle])
+            : false;
+
           return {
-            identificador,
-            signos: `${presion_arterial}-${frecuencia_cardiaca}-${oxigenacion_sangre}`,
-            fecha,
-            operativo_id: operativo_id || null,
-            lugar_custom: lugar_custom || null,
+            nombre,
+            apellido,
+            dni,
+            fecha_nacimiento: fecha_nacimiento || null,
+            genero: genero || null,
+            situacion_de_calle,
           };
         });
 
-        setPayload(JSON.stringify({ operativo_id: null, lugar_custom: null, rows }, null, 2));
+        setPayload(JSON.stringify({ rows }, null, 2));
       } catch (err) {
         setFileError(err.message || "No se pudo leer el archivo Excel.");
       }
@@ -205,6 +216,7 @@ export default function CargaMasivaSignos() {
     setMessage("");
     setErrores([]);
     setOkCount(null);
+    setTotalRows(null);
 
     let data;
     try {
@@ -221,8 +233,9 @@ export default function CargaMasivaSignos() {
 
     setLoading(true);
     try {
-      const response = await api.post("/signos/bulk", data);
+      const response = await api.post("/personas/bulk", data);
       setOkCount(response.data.ok);
+      setTotalRows(response.data.total);
       setErrores(response.data.errores || []);
       if ((response.data.errores || []).length > 0 && response.data.ok === 0) {
         setError("La carga no pudo completarse. Revisá los errores detallados abajo.");
@@ -231,8 +244,8 @@ export default function CargaMasivaSignos() {
       }
       setMessage(
         response.data.ok > 0
-          ? `Carga finalizada: ${response.data.ok} fila(s) procesada(s).`
-          : "No se pudo guardar ninguna fila. Revisá los errores."
+          ? `Carga finalizada: ${response.data.ok} persona(s) cargada(s) de ${response.data.total}.`
+          : "No se pudo guardar ninguna persona. Revisá los errores."
       );
     } catch (err) {
       const detail = err.response?.data?.detail;
@@ -241,7 +254,7 @@ export default function CargaMasivaSignos() {
       } else if (typeof detail === "string") {
         setError(detail);
       } else {
-        setError("Error al cargar registros masivos.");
+        setError("Error al cargar personas masivas.");
       }
     } finally {
       setLoading(false);
@@ -252,12 +265,11 @@ export default function CargaMasivaSignos() {
     <main className="page-shell">
       <section className="card card-form">
         <div className="form-actions-row">
-          <h1>Carga masiva de signos</h1>
+          <h1>Carga masiva de personas</h1>
         </div>
         <p>
-          Sube un archivo Excel (.xls/.xlsx) con una fila por persona. La primera columna puede
-          ser DNI o Nombre y Apellido juntos. El archivo debe tener columnas: Identificador,
-          Fecha, Presión arterial, Frecuencia cardíaca y Oxigenación.
+          Sube un archivo Excel (.xls/.xlsx) con una fila por persona. Los campos mínimos son
+          Nombre, Apellido y DNI. También acepta Fecha de nacimiento, Género y Situación de calle.
         </p>
         <label>
           Seleccionar archivo Excel
@@ -284,13 +296,15 @@ export default function CargaMasivaSignos() {
           </button>
         </form>
 
-        {okCount !== null && (
+        {(okCount !== null || totalRows !== null) && (
           <div className="card card-secondary">
             <h2>Resultado de la carga</h2>
-            <p>Filas guardadas: {okCount}</p>
+            <p>
+              Personas procesadas: {okCount ?? 0}/{totalRows ?? 0}
+            </p>
             {errores.length > 0 ? (
               <div>
-                <p>Errores encontrados:</p>
+                <p>Errores y omisiones encontrados:</p>
                 <ul>
                   {errores.map((item, index) => (
                     <li key={`${item}-${index}`}>{item}</li>

@@ -1,4 +1,4 @@
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from enum import Enum
 import re
 from typing import Any, List, Optional
@@ -7,6 +7,69 @@ from pydantic import BaseModel, Field, ValidationError, conint, constr, confloat
 
 DNI_REGEX = r"^\d{6,9}$"
 PRESION_REGEX = r"^\d{2,3}/\d{2,3}$"
+
+
+def _normalize_date_value(value: Any) -> Any:
+    if value is None or value == "":
+        return None
+
+    if isinstance(value, datetime):
+        return value.date()
+
+    if isinstance(value, date):
+        return value
+
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        excel_epoch = datetime(1899, 12, 30)
+        return (excel_epoch + timedelta(days=float(value))).date()
+
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+
+        if re.fullmatch(r"^\d{5,7}(?:\.\d+)?$", text):
+            try:
+                excel_epoch = datetime(1899, 12, 30)
+                return (excel_epoch + timedelta(days=float(text))).date()
+            except Exception:
+                pass
+
+        cleaned = text.replace("T", " ").replace("Z", "").strip()
+        try:
+            return date.fromisoformat(cleaned)
+        except ValueError:
+            pass
+
+        for fmt in (
+            "%d/%m/%Y",
+            "%d/%m/%y",
+            "%d-%m-%Y",
+            "%d-%m-%y",
+            "%d.%m.%Y",
+            "%d.%m.%y",
+            "%m/%d/%Y",
+            "%m/%d/%y",
+            "%m-%d-%Y",
+            "%m-%d-%y",
+            "%Y/%m/%d",
+            "%Y-%m-%d",
+            "%d/%m/%Y %H:%M:%S",
+            "%d/%m/%Y %H:%M",
+            "%Y/%m/%d %H:%M:%S",
+        ):
+            try:
+                return datetime.strptime(cleaned, fmt).date()
+            except ValueError:
+                continue
+
+        try:
+            return datetime.fromisoformat(cleaned).date()
+        except ValueError:
+            return value
+
+    return value
+
 
 class LoginRequest(BaseModel):
     username: constr(strip_whitespace=True, min_length=3)
@@ -35,9 +98,7 @@ class PersonaCreate(BaseModel):
     @field_validator("fecha_nacimiento", mode="before")
     @classmethod
     def clean_fecha(cls, v: Any) -> Any:
-        if v == "" or v is None:
-            return None
-        return v
+        return _normalize_date_value(v)
 
     @field_validator("genero", mode="before")
     @classmethod
@@ -52,6 +113,55 @@ class PersonaRead(PersonaCreate):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+class PersonaBulkRow(BaseModel):
+    nombre: Optional[constr(strip_whitespace=True, min_length=1)] = None
+    apellido: Optional[constr(strip_whitespace=True, min_length=1)] = None
+    dni: Optional[constr(pattern=DNI_REGEX)] = None
+    fecha_nacimiento: Optional[date] = None
+    genero: Optional[constr(strip_whitespace=True, min_length=1)] = None
+    situacion_de_calle: bool = False
+
+    @field_validator("nombre", "apellido", mode="before")
+    @classmethod
+    def clean_nombre_apellido(cls, v: Any) -> Optional[str]:
+        if v is None:
+            return None
+        if isinstance(v, str):
+            val = v.strip()
+            return val if val else None
+        return str(v)
+
+    @field_validator("dni", mode="before")
+    @classmethod
+    def clean_dni(cls, v: Any) -> Optional[str]:
+        if v is None or v == "":
+            return None
+        if isinstance(v, str):
+            value = re.sub(r"[\s.-]", "", v.strip())
+            return value if value else None
+        return str(v) if v is not None else None
+
+    @field_validator("fecha_nacimiento", mode="before")
+    @classmethod
+    def clean_fecha(cls, v: Any) -> Any:
+        return _normalize_date_value(v)
+
+    @field_validator("genero", mode="before")
+    @classmethod
+    def clean_genero(cls, v: Any) -> Optional[str]:
+        if isinstance(v, str):
+            val = v.strip()
+            return val if val else None
+        return v
+
+class PersonaBulkRequest(BaseModel):
+    rows: list[PersonaBulkRow]
+
+class PersonaBulkResponse(BaseModel):
+    ok: int
+    total: int
+    errores: list[str]
 
 class OperativoUpdate(BaseModel):
     lugar: constr(strip_whitespace=True, min_length=3)
@@ -79,6 +189,11 @@ class SignosCreate(BaseModel):
         if isinstance(v, str):
             return re.sub(r"[\s.-]", "", v.strip())
         return str(v) if v is not None else ""
+
+    @field_validator("fecha", mode="before")
+    @classmethod
+    def clean_fecha(cls, v: Any) -> Any:
+        return _normalize_date_value(v)
 
     @field_validator("presion_arterial", mode="before")
     @classmethod
@@ -123,6 +238,11 @@ class SignosBulkRow(BaseModel):
     fecha: date
     operativo_id: Optional[int] = None
     lugar_custom: Optional[constr(strip_whitespace=True, min_length=3)] = None
+
+    @field_validator("fecha", mode="before")
+    @classmethod
+    def clean_fecha(cls, v: Any) -> Any:
+        return _normalize_date_value(v)
 
     @model_validator(mode="after")
     def ensure_identificador(cls, values):
