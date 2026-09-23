@@ -116,6 +116,8 @@ Hay dos usuarios: `voluntario` y `admin`. Sus contraseñas **no están en el có
 
 Para cambiar una contraseña: editá `.env` y ejecutá `docker compose up -d` (se reinicia el backend).
 
+**El `.env` es por computadora**: como no se sube al repositorio, un `git pull` en otra máquina no lo trae. Hay que repetir el paso `cp .env.example .env` y completar las contraseñas en cada compu donde se instale el sistema (conviene usar las mismas contraseñas en todas). La `SISVAP_SECRET_KEY` no hace falta que sea igual en todas: solo hace que las sesiones no sean intercambiables entre backends distintos.
+
 | Acción | voluntario | admin |
 |---|:---:|:---:|
 | Buscar y dar de alta personas | ✔ | ✔ |
