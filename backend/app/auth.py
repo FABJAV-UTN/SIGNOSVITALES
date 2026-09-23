@@ -20,6 +20,8 @@ def _env_obligatoria(nombre: str) -> str:
             f"Falta la variable de entorno {nombre}. "
             "Copiá .env.example como .env en la raíz del proyecto y completá las contraseñas."
         )
+    if len(valor) < 6:
+        raise RuntimeError(f"{nombre} tiene que tener al menos 6 caracteres (el login no acepta contraseñas más cortas).")
     return valor
 
 

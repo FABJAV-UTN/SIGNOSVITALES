@@ -13,6 +13,7 @@ import Historial from "./components/Historial";
 import CargaMasivaSignos from "./components/CargaMasivaSignos";
 import CargaMasivaPersonas from "./components/CargaMasivaPersonas";
 import CargaMasivaKits from "./components/CargaMasivaKits";
+import Cumpleanos from "./components/Cumpleanos";
 import "./App.css";
 
 function ProtectedRoute({ children }) {
@@ -102,6 +103,14 @@ function AppRoutes() {
           element={
             <ProtectedRoute>
               <CargaMasivaKits />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/cumpleanos"
+          element={
+            <ProtectedRoute>
+              <Cumpleanos />
             </ProtectedRoute>
           }
         />

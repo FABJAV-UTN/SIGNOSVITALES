@@ -992,3 +992,124 @@ td.num {
 .persona-selector .text-muted.small {
   margin-top: -0.5rem;
 }
+
+/* Alta desde la revisión: tilde de situación de calle alineado con los campos */
+.alta-campos .alta-calle {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+  align-self: end;
+  min-height: 38px;
+  color: var(--text);
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+.alta-campos .alta-calle input {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  accent-color: var(--primary);
+}
+
+/* ---------- Cumpleaños ---------- */
+.nav-badge {
+  display: inline-block;
+  min-width: 1.3rem;
+  margin-left: 0.35rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  background: white;
+  color: var(--primary);
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.aviso-cumple {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0.5rem 0 1rem;
+  padding: 0.8rem 1rem;
+  border-radius: 10px;
+  background: #fff6e0;
+  border: 1px solid #f3dea5;
+  color: #5c3d00;
+  text-decoration: none;
+}
+
+.aviso-cumple:hover {
+  border-color: #f0c040;
+}
+
+.aviso-cumple-icono {
+  font-size: 1.5rem;
+}
+
+.cumple-grupo h2 {
+  font-size: 1.1rem;
+  margin: 1.25rem 0 0.5rem;
+}
+
+.cumple-lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.cumple-lista li {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 2fr) auto;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.7rem 0.9rem;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.cumple-lista li.cumple-pronto {
+  border-color: #f0c040;
+}
+
+.cumple-lista li.cumple-hoy {
+  border-color: var(--primary);
+  background: rgba(227, 0, 15, 0.05);
+}
+
+.cumple-persona,
+.cumple-fecha {
+  display: flex;
+  flex-direction: column;
+}
+
+.cumple-dias {
+  font-weight: 600;
+}
+
+.cumple-hoy .cumple-dias {
+  color: var(--primary);
+}
+
+.cumple-edad {
+  white-space: nowrap;
+}
+
+@media (max-width: 600px) {
+  .cumple-lista li {
+    grid-template-columns: 1fr auto;
+  }
+
+  .cumple-fecha {
+    grid-row: 2;
+  }
+}
+
+.menu-button .nav-badge {
+  font-size: 0.75rem;
+  align-self: center;
+}

@@ -38,6 +38,8 @@ export default function RevisionCarga({ data, preview, endpoint, onCancelar, onT
             apellido: r.apellido_sugerido || "",
             dni: /^\d{6,9}$/.test(r.identificador.replace(/[\s.-]/g, "")) ? r.identificador.replace(/[\s.-]/g, "") : "",
             genero: "",
+            fecha_nacimiento: "",
+            situacion_de_calle: false,
           },
         ])
     )
@@ -116,6 +118,8 @@ export default function RevisionCarga({ data, preview, endpoint, onCancelar, onT
             apellido: a.apellido.trim() || "Sin apellido",
             dni: a.dni.trim(),
             genero: a.genero || null,
+            fecha_nacimiento: a.fecha_nacimiento || null,
+            situacion_de_calle: a.situacion_de_calle,
           };
         });
         const res = await api.post("/personas/bulk", { rows: filasAlta });
@@ -317,6 +321,23 @@ export default function RevisionCarga({ data, preview, endpoint, onCancelar, onT
                           </option>
                         ))}
                       </select>
+                    </label>
+                    <label>
+                      Fecha de nacimiento
+                      <input
+                        type="date"
+                        value={alta.fecha_nacimiento}
+                        max={new Date().toISOString().slice(0, 10)}
+                        onChange={(e) => actualizarAlta(r.identificador, { fecha_nacimiento: e.target.value })}
+                      />
+                    </label>
+                    <label className="alta-calle">
+                      <input
+                        type="checkbox"
+                        checked={alta.situacion_de_calle}
+                        onChange={(e) => actualizarAlta(r.identificador, { situacion_de_calle: e.target.checked })}
+                      />
+                      En situación de calle
                     </label>
                   </div>
                 )}

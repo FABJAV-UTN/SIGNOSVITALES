@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, NavLink } from "react-router-dom";
 import { useAuth } from "./AuthContext";
+import useCumpleanos from "./useCumpleanos";
 
 const navItems = [
   { path: "/dashboard", label: "Inicio" },
@@ -17,6 +18,7 @@ const navItems = [
 export default function Navbar() {
   const [open, setOpen] = useState(false);
   const { token, logout, isAdmin } = useAuth();
+  const { proximos } = useCumpleanos();
   const headerRef = useRef(null);
 
   // Publica la altura real de la navbar (cambia según el ancho) para los paneles "sticky".
@@ -37,8 +39,9 @@ export default function Navbar() {
         <Link to="/dashboard" className="brand-link">
           Cruz Roja / Signos Vitales
         </Link>
-        <button className="menu-button" onClick={() => setOpen((prev) => !prev)}>
+        <button className="menu-button" onClick={() => setOpen((prev) => !prev)} aria-label="Menú">
           ☰
+          {proximos.length > 0 && <span className="nav-badge">🎂 {proximos.length}</span>}
         </button>
       </div>
       <nav className={`navbar-menu ${open ? "open" : ""}`}>
@@ -52,6 +55,17 @@ export default function Navbar() {
             {item.label}
           </NavLink>
         ))}
+        {token && (
+          <NavLink
+            to="/cumpleanos"
+            className={({ isActive }) => (isActive ? "nav-link active" : "nav-link")}
+            onClick={() => setOpen(false)}
+            title={proximos.length ? `${proximos.length} cumpleaños en los próximos 7 días` : undefined}
+          >
+            Cumpleaños
+            {proximos.length > 0 && <span className="nav-badge">{proximos.length}</span>}
+          </NavLink>
+        )}
         {isAdmin && (
           <NavLink
             to="/historial"

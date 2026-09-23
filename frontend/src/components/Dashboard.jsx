@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { useAuth } from "./AuthContext";
+import { AvisoCumpleanos } from "./Cumpleanos";
 
 export default function Dashboard() {
   const { isAdmin } = useAuth();
@@ -8,6 +9,7 @@ export default function Dashboard() {
       <section className="card">
         <h1>Panel de Control</h1>
         <p className="text-muted">Seleccione una acción rápida para registrar y revisar el operativo.</p>
+        <AvisoCumpleanos />
         <div className="grid cards-grid">
           <Link to="/personas/nueva" className="card-action">
             Nueva persona
@@ -26,6 +28,9 @@ export default function Dashboard() {
           </Link>
           <Link to="/kits/carga-masiva" className="card-action">
             Carga masiva de kits
+          </Link>
+          <Link to="/cumpleanos" className="card-action">
+            Cumpleaños
           </Link>
           <Link to="/kits/historial" className="card-action">
             Historial de kits

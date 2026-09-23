@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import api from "../api";
 import { useAuth } from "./AuthContext";
 import { generoTexto } from "../utils/genero";
+import { proximoCumple } from "../utils/cumpleanos";
 
 /**
  * Ficha de una persona: datos, totales de atenciones, acciones y kits recibidos.
@@ -30,6 +31,7 @@ export default function PersonaPanel({ persona, onClose, mostrarVerHistorial = t
   if (!persona) return null;
 
   const signos = totalSignos ?? persona.total_signos;
+  const cumple = proximoCumple(persona.fecha_nacimiento);
   const totalKits = loadingKits ? persona.total_kits : kits.length;
 
   return (
@@ -63,7 +65,15 @@ export default function PersonaPanel({ persona, onClose, mostrarVerHistorial = t
         <dt>Género</dt>
         <dd>{generoTexto(persona.genero)}</dd>
         <dt>Nacimiento</dt>
-        <dd>{persona.fecha_nacimiento || "No informado"}</dd>
+        <dd>
+          {persona.fecha_nacimiento || "No informado"}
+          {cumple && (
+            <span className="text-muted small">
+              {" "}
+              ({cumple.dias === 0 ? cumple.edad : cumple.edad - 1} años{cumple.dias <= 7 ? ` · cumple ${cumple.edad} ${cumple.dias === 0 ? "hoy 🎂" : `en ${cumple.dias} día(s)`}` : ""})
+            </span>
+          )}
+        </dd>
         <dt>Situación de calle</dt>
         <dd>{persona.situacion_de_calle ? "Sí" : "No"}</dd>
       </dl>
