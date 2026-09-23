@@ -117,7 +117,8 @@ def format_validation_errors(exc: ValidationError) -> str:
             else:
                 partes.append(f"{campo}: fecha inválida '{valor}' (usar AAAA-MM-DD o DD/MM/AAAA)")
         else:
-            partes.append(f"{campo}: {error['msg']}")
+            mensaje = error["msg"].removeprefix("Value error, ")
+            partes.append(f"{campo}: {mensaje}")
     return ", ".join(partes)
 
 
@@ -420,3 +421,62 @@ class SignosBulkPreviewResponse(BaseModel):
     total_filas: int
     identificadores: list[IdentificadorRevision]
     invalidas: list[FilaInvalida]
+
+# La misma respuesta de revisión sirve para cualquier carga masiva.
+BulkPreviewResponse = SignosBulkPreviewResponse
+
+
+# ---------- Carga masiva de kits ----------
+
+TIPOS_KIT = ("PPAAS", "ABRIGO")
+
+
+def normalize_tipo_kit(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    texto = _strip_accents(str(value)).casefold().strip()
+    texto = re.sub(r"^kit\s+", "", texto)
+    if not texto:
+        return None
+    if texto in ("ppaas", "higiene", "primeros auxilios", "higiene / primeros auxilios", "higiene y primeros auxilios"):
+        return "PPAAS"
+    if texto in ("abrigo", "abrigos"):
+        return "ABRIGO"
+    raise ValueError("tipo de kit inválido: usar PPAAS o ABRIGO")
+
+
+class KitBulkRow(BaseModel):
+    persona_id: Optional[int] = None
+    fila: Optional[int] = None
+    identificador: Optional[str] = None
+    tipo: str
+    fecha: date
+
+    @field_validator("tipo", mode="before")
+    @classmethod
+    def clean_tipo(cls, v: Any) -> Optional[str]:
+        return normalize_tipo_kit(v)
+
+    @field_validator("fecha", mode="before")
+    @classmethod
+    def clean_fecha(cls, v: Any) -> Any:
+        return _normalize_date_value(v)
+
+    @model_validator(mode="after")
+    def ensure_identificador(cls, values):
+        if values.persona_id is not None:
+            values.identificador = (values.identificador or "").strip() or f"persona #{values.persona_id}"
+            return values
+        if not values.identificador or not str(values.identificador).strip():
+            raise ValueError("Debe proporcionar DNI o Nombre y Apellido en la primera columna.")
+        values.identificador = str(values.identificador).strip()
+        return values
+
+
+class KitBulkRequest(BaseModel):
+    rows: list[Optional[dict[str, Any]]]
+
+
+class KitBulkResponse(BaseModel):
+    ok: int
+    errores: list[str]

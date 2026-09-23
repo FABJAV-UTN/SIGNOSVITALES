@@ -1,13 +1,13 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import api from "../api";
+import PersonaSelector from "./PersonaSelector";
 
 export default function RegistrarSignos() {
   const navigate = useNavigate();
   const location = useLocation();
   const initialDni = location.state?.dni || "";
 
-  const [dni, setDni] = useState(initialDni);
   const [persona, setPersona] = useState(null);
   const [presion, setPresion] = useState("");
   const [fc, setFc] = useState("");
@@ -16,49 +16,35 @@ export default function RegistrarSignos() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    if (initialDni) {
-      buscarPersona(initialDni);
-    }
-  }, [initialDni]);
-
-  async function buscarPersona(value) {
+  function elegirPersona(p) {
+    setPersona(p);
     setError("");
-    setPersona(null);
-    setLoading(true);
-    try {
-      const response = await api.get(`/personas/${value}`);
-      setPersona(response.data);
-    } catch (err) {
-      setError("Persona no encontrada. Registre primero la persona.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleBuscar(event) {
-    event.preventDefault();
-    if (!dni) return;
-    await buscarPersona(dni);
+    if (p) setMessage("");
   }
 
   async function handleSubmit(event) {
     event.preventDefault();
+    if (!persona) return;
     setError("");
     setMessage("");
     setLoading(true);
     try {
       await api.post("/signos", {
-        dni: dni.trim(),
+        dni: persona.dni,
         presion_arterial: presion.trim() || null,
         frecuencia_cardiaca: fc !== "" ? Number(fc) : null,
         oxigenacion_sangre: spo2 !== "" ? Number(spo2) : null,
       });
-      setMessage("Registro de signos guardado con éxito.");
+      setMessage(`Signos de ${persona.nombre} ${persona.apellido} guardados con éxito.`);
       setPresion("");
       setFc("");
       setSpo2("");
-      setTimeout(() => navigate("/dashboard"), 1200);
+      if (initialDni) {
+        setTimeout(() => navigate("/personas/buscar"), 1200);
+      } else {
+        // Listo para la siguiente persona.
+        setPersona(null);
+      }
     } catch (err) {
       const detail = err.response?.data?.detail;
       if (Array.isArray(detail)) {
@@ -78,44 +64,34 @@ export default function RegistrarSignos() {
       <section className="card card-form">
         <div className="form-actions-row">
           <h1>Registrar signos vitales</h1>
-          <Link to="/signos/carga-masiva" className="button button-secondary">
+          <Link to="/signos/carga-masiva" className="button button-outline button-small">
             Carga masiva
           </Link>
         </div>
-        <form onSubmit={handleBuscar}>
-          <label>
-            DNI
-            <input value={dni} onChange={(e) => setDni(e.target.value)} required placeholder="12345678" />
-          </label>
-          <button type="submit" className="button button-primary" disabled={loading}>
-            Buscar persona
-          </button>
-        </form>
-        {error && <div className="alert alert-error">{error}</div>}
+
+        {message && <div className="alert alert-success">{message}</div>}
+
+        <PersonaSelector persona={persona} onChange={elegirPersona} dniInicial={initialDni} />
+
         {persona && (
-          <div className="info-card">
-            <h3>{persona.nombre} {persona.apellido}</h3>
-            <p>DNI: {persona.dni}</p>
-            <p>Situación de calle: {persona.situacion_de_calle ? "Sí" : "No"}</p>
-            <form onSubmit={handleSubmit}>
-              <label>
-                Presión arterial
-                <input value={presion} onChange={(e) => setPresion(e.target.value)} placeholder="120/80" required />
-              </label>
-              <label>
-                Frecuencia cardíaca
-                <input type="number" value={fc} onChange={(e) => setFc(e.target.value)} placeholder="80" required />
-              </label>
-              <label>
-                Oxigenación en sangre
-                <input type="number" step="0.1" value={spo2} onChange={(e) => setSpo2(e.target.value)} placeholder="97.5" required />
-              </label>
-              {message && <div className="alert alert-success">{message}</div>}
-              <button type="submit" className="button button-primary" disabled={loading}>
-                {loading ? "Guardando..." : "Confirmar registro"}
-              </button>
-            </form>
-          </div>
+          <form onSubmit={handleSubmit} className="form-after-persona">
+            <label>
+              Presión arterial
+              <input value={presion} onChange={(e) => setPresion(e.target.value)} placeholder="120/80" required />
+            </label>
+            <label>
+              Frecuencia cardíaca
+              <input type="number" value={fc} onChange={(e) => setFc(e.target.value)} placeholder="80" required />
+            </label>
+            <label>
+              Oxigenación en sangre
+              <input type="number" step="0.1" value={spo2} onChange={(e) => setSpo2(e.target.value)} placeholder="97.5" required />
+            </label>
+            {error && <div className="alert alert-error">{error}</div>}
+            <button type="submit" className="button button-primary" disabled={loading}>
+              {loading ? "Guardando..." : "Confirmar registro"}
+            </button>
+          </form>
         )}
       </section>
     </main>

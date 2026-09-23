@@ -24,6 +24,9 @@ export default function Dashboard() {
           <Link to="/kits/entregar" className="card-action">
             Entregar kit
           </Link>
+          <Link to="/kits/carga-masiva" className="card-action">
+            Carga masiva de kits
+          </Link>
           <Link to="/kits/historial" className="card-action">
             Historial de kits
           </Link>

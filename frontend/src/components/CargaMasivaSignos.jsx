@@ -1,6 +1,7 @@
 import { useState } from "react";
 import api from "../api";
-import RevisionCargaSignos from "./RevisionCargaSignos";
+import ResultadoCarga from "./ResultadoCarga";
+import RevisionCarga from "./RevisionCarga";
 import { formatExcelDate, readExcelRows } from "../utils/excelDates";
 
 const normalizeHeader = (value) =>
@@ -239,49 +240,17 @@ export default function CargaMasivaSignos() {
       </section>
 
       {revision && (
-        <RevisionCargaSignos
+        <RevisionCarga
           key={JSON.stringify(revision.preview.identificadores.map((r) => r.identificador))}
           data={revision.data}
+          endpoint="/signos/bulk"
           preview={revision.preview}
           onCancelar={() => setRevision(null)}
           onTerminado={terminar}
         />
       )}
 
-      {resultado && (
-        <section className="card card-secondary">
-          <h2>Resultado de la carga</h2>
-          <p>
-            <strong>Filas guardadas: {resultado.ok}</strong>
-            {resultado.omitidas > 0 && <> · Filas no cargadas por decisión tuya: {resultado.omitidas}</>}
-          </p>
-          {resultado.creadas.length > 0 && (
-            <div>
-              <p>Personas creadas ({resultado.creadas.length}):</p>
-              <ul>
-                {resultado.creadas.map((p) => (
-                  <li key={p.id}>
-                    {p.nombre} {p.apellido} — DNI {p.dni}
-                    {p.provisorio ? " (sin DNI en la planilla: se asignó uno provisorio)" : ""}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-          {resultado.errores.length > 0 ? (
-            <div>
-              <p>Errores encontrados:</p>
-              <ul>
-                {resultado.errores.map((item, index) => (
-                  <li key={`${item}-${index}`}>{item}</li>
-                ))}
-              </ul>
-            </div>
-          ) : (
-            <p>No se encontraron errores.</p>
-          )}
-        </section>
-      )}
+      <ResultadoCarga resultado={resultado} unidad="fila(s) de signos guardada(s)" />
     </main>
   );
 }

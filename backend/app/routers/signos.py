@@ -1,7 +1,6 @@
 from datetime import date, datetime, time
 import re
 import unicodedata
-from types import SimpleNamespace
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -13,11 +12,9 @@ from sqlalchemy.orm import selectinload
 from ..auth import get_current_user, require_admin
 from ..database import get_session
 from ..models import Operativo, Persona, RegistroSignosVitales
-from ..matching import candidatos, es_coincidencia_exacta, es_dni, limpiar_dni, normalizar, separar_nombre_apellido, similitud
+from ..revision import revisar_identificadores
 from ..schemas import (
     FilaInvalida,
-    IdentificadorRevision,
-    PersonaCandidata,
     SignosBulkPreviewResponse,
     SignosBulkRequest,
     SignosBulkResponse,
@@ -152,81 +149,28 @@ def _numero_fila(row: SignosBulkRow | None, raw_row, index: int) -> int:
     return index
 
 
-def _candidata(persona: Persona, puntaje: float = 1.0) -> PersonaCandidata:
-    return PersonaCandidata(
-        id=persona.id, nombre=persona.nombre, apellido=persona.apellido, dni=persona.dni, similitud=puntaje
-    )
-
-
 @router.post("/bulk/preview", response_model=SignosBulkPreviewResponse)
 async def revisar_signos_bulk(
     bulk_request: SignosBulkRequest,
     user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_session),
 ):
-    """Revisión previa (no guarda nada): agrupa las filas por identificador y dice, para
-    cada uno, si la persona existe, si hay personas parecidas para confirmar o si no existe."""
+    """Revisión previa (no guarda nada): ver app/revision.py."""
     personas = (await db.execute(select(Persona))).scalars().all()
-    grupos: dict[str, dict] = {}
+    validas: list[tuple[int, str]] = []
     invalidas: list[FilaInvalida] = []
-
     for index, raw_row in enumerate(bulk_request.rows, start=1):
         row, _, error = _parsear_fila(raw_row)
         fila = _numero_fila(row, raw_row, index)
         if error:
             invalidas.append(FilaInvalida(fila=fila, error=error))
-            continue
-        identificador = row.identificador.strip()
-        clave = limpiar_dni(identificador) if es_dni(identificador) else normalizar(identificador)
-        grupo = grupos.setdefault(clave, {"identificador": identificador, "filas": []})
-        grupo["filas"].append(fila)
-
-    revision: list[IdentificadorRevision] = []
-    for grupo in grupos.values():
-        identificador = grupo["identificador"]
-        nombre_sug, apellido_sug = separar_nombre_apellido(identificador)
-        item = IdentificadorRevision(
-            identificador=identificador,
-            filas=grupo["filas"],
-            estado="no_encontrada",
-            nombre_sugerido=nombre_sug,
-            apellido_sugerido=apellido_sug,
-        )
-        if es_dni(identificador):
-            dni = limpiar_dni(identificador)
-            persona = next((p for p in personas if p.dni in (dni, identificador)), None)
-            if persona:
-                item.estado = "exacta"
-                item.persona = _candidata(persona)
-            else:
-                item.nombre_sugerido, item.apellido_sugerido = "", ""
         else:
-            exactas = [p for p in personas if es_coincidencia_exacta(identificador, p)]
-            if len(exactas) == 1:
-                item.estado = "exacta"
-                item.persona = _candidata(exactas[0])
-            elif len(exactas) > 1:
-                item.estado = "ambigua"
-                item.candidatos = [_candidata(p) for p in exactas]
-            else:
-                parecidas = candidatos(identificador, personas)
-                if parecidas:
-                    item.estado = "sugerencia"
-                    item.candidatos = [_candidata(p, puntaje) for p, puntaje in parecidas]
-        revision.append(item)
-
-    # Entre las que no existen, marcar las que parecen la misma persona escrita distinto.
-    no_encontradas = [r for r in revision if r.estado == "no_encontrada" and not es_dni(r.identificador)]
-    for i, item in enumerate(no_encontradas):
-        for anterior in no_encontradas[:i]:
-            if anterior.parecido_a:
-                continue
-            falsa = SimpleNamespace(nombre=anterior.nombre_sugerido, apellido=anterior.apellido_sugerido)
-            if similitud(item.identificador, falsa) >= 0.8:
-                item.parecido_a = anterior.identificador
-                break
-
-    return SignosBulkPreviewResponse(total_filas=len(bulk_request.rows), identificadores=revision, invalidas=invalidas)
+            validas.append((fila, row.identificador))
+    return SignosBulkPreviewResponse(
+        total_filas=len(bulk_request.rows),
+        identificadores=revisar_identificadores(validas, personas),
+        invalidas=invalidas,
+    )
 
 
 @router.post("/bulk", response_model=SignosBulkResponse, status_code=201)

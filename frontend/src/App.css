@@ -955,3 +955,40 @@ td.num {
   margin-top: 1rem;
   padding-top: 1rem;
 }
+
+/* ---------- Formularios individuales con buscador ---------- */
+.form-actions-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.form-actions-row h1 {
+  margin-bottom: 0.25rem;
+}
+
+.persona-elegida {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  background: white;
+  border: 1px solid var(--primary);
+  border-radius: 10px;
+  padding: 0.8rem 1rem;
+  margin-bottom: 1rem;
+}
+
+.persona-elegida .alert {
+  margin: 0.6rem 0 0;
+}
+
+.kits-previos p {
+  margin: 0.4rem 0 0;
+}
+
+.persona-selector .text-muted.small {
+  margin-top: -0.5rem;
+}
