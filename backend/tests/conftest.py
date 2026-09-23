@@ -10,3 +10,8 @@ import tempfile
 
 _tmp = tempfile.mkdtemp(prefix="sisvap-tests-")
 os.environ["SIGNOS_VITALES_DB_URL"] = f"sqlite+aiosqlite:///{_tmp}/test.db"
+
+# Credenciales de prueba (el backend no arranca sin ellas).
+os.environ.setdefault("SISVAP_ADMIN_PASSWORD", "admin-de-prueba")
+os.environ.setdefault("SISVAP_VOLUNTARIO_PASSWORD", "voluntario-de-prueba")
+os.environ.setdefault("SISVAP_SECRET_KEY", "clave-de-prueba")

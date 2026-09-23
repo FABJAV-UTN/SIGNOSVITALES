@@ -85,11 +85,12 @@ Requisitos: Docker y Docker Compose.
 ```bash
 git clone https://github.com/FABJAV-UTN/SIGNOSVITALES.git
 cd SIGNOSVITALES
+cp .env.example .env      # y editá .env: poné las contraseñas de admin y voluntario
 docker compose up -d --build
 ```
 
-- Aplicación: `http://localhost` (o `http://<ip-de-la-notebook>` desde otro dispositivo de la misma red)
-- API y documentación interactiva: `http://localhost:8000/docs`
+- Aplicación: `http://localhost` (o `http://<ip-de-la-notebook>` desde otro dispositivo de la misma red; ver [Acceso con un nombre](#acceso-con-un-nombre-en-lugar-de-la-ip)).
+- El backend **no** se publica fuera de Docker: solo se llega a él a través de Nginx, en `/api/`. La documentación interactiva de la API (`/docs`) está disponible cuando se corre el backend en modo desarrollo (ver más abajo).
 
 La primera vez se crea sola la base vacía en `backend/data/signos_vitales.db`, con el operativo por defecto (Museo Ferroviario, jueves 20:30).
 
@@ -103,14 +104,43 @@ docker compose down                # apagar todo (los datos quedan en backend/da
 
 Después de modificar código, volvé a construir con `docker compose up -d --build`.
 
-## Usuarios
+## Usuarios y permisos
 
-| Usuario | Contraseña | Rol |
-|---|---|---|
-| `voluntario` | `cruzroja2024` | voluntario |
-| `admin` | `admin2024` | admin |
+Hay dos usuarios: `voluntario` y `admin`. Sus contraseñas **no están en el código**: se definen en el archivo `.env` de la raíz del proyecto (copiado de `.env.example`), que no se sube al repositorio. Sin esas contraseñas el backend no arranca.
 
-> ⚠️ Los usuarios y la clave de firma de los JWT (`SECRET_KEY`) están definidos en `backend/app/auth.py`. Antes de usar el sistema con datos reales, cambiá las contraseñas y la `SECRET_KEY`.
+| Variable en `.env` | Para qué |
+|---|---|
+| `SISVAP_ADMIN_PASSWORD` | Contraseña del usuario `admin` (obligatoria) |
+| `SISVAP_VOLUNTARIO_PASSWORD` | Contraseña del usuario `voluntario` (obligatoria) |
+| `SISVAP_SECRET_KEY` | Clave para firmar las sesiones (JWT). Si queda vacía se genera una al azar en cada arranque y hay que volver a iniciar sesión después de reiniciar el backend |
+
+Para cambiar una contraseña: editá `.env` y ejecutá `docker compose up -d` (se reinicia el backend).
+
+| Acción | voluntario | admin |
+|---|:---:|:---:|
+| Buscar y dar de alta personas | ✔ | ✔ |
+| Registrar signos y entregar kits | ✔ | ✔ |
+| Cargas masivas (personas, signos, kits) | ✔ | ✔ |
+| Historial de kits y configurar el operativo | ✔ | ✔ |
+| Historial de signos (general y por persona) | — | ✔ |
+
+Todas las rutas de la API, salvo el login y la consulta del operativo activo, exigen haber iniciado sesión.
+
+## Acceso con un nombre en lugar de la IP
+
+En el operativo, la notebook comparte un hotspot y los celulares se conectan a esa red. Hay tres maneras de que no haga falta tipear la IP; se pueden combinar.
+
+**1. Código QR (lo más simple).** Si el hotspot se crea con NetworkManager (la opción "Punto de acceso Wi-Fi" de Ubuntu), la notebook siempre queda con la IP `10.42.0.1`. Un QR impreso con `http://10.42.0.1` en la mesa del operativo alcanza: se escanea con la cámara y abre el sistema.
+
+**2. Un nombre propio en el hotspot, por ejemplo `http://sisvap.lan`.** El hotspot de NetworkManager usa `dnsmasq` para dar las direcciones a los celulares; se le puede agregar un nombre. Una sola vez, en la notebook:
+
+```bash
+echo "address=/sisvap.lan/10.42.0.1" | sudo tee /etc/NetworkManager/dnsmasq-shared.d/sisvap.conf
+```
+
+Después apagá y volvé a encender el hotspot. Cualquier celular conectado a esa red abre el sistema en `http://sisvap.lan`. Usá una terminación como `.lan`, no `.com`: un `.com` puede existir en Internet, y algunos navegadores fuerzan HTTPS en ciertos dominios. Si un teléfono tiene configurado un "DNS privado" fijo (Android → Ajustes → Red → DNS privado), puede ignorar el nombre: en ese caso, dejarlo en "Automático" o usar el QR.
+
+**3. `http://<nombre-de-la-notebook>.local`.** Ubuntu anuncia su nombre en la red (Avahi/mDNS). Funciona bien en iPhone y en computadoras; en Android depende de la versión, así que no conviene depender solo de esto.
 
 ## Cargas masivas desde Excel
 
@@ -144,11 +174,12 @@ Backend, sin Docker:
 ```bash
 cd backend
 uv sync
-uv run uvicorn app.main:app --reload --port 8000
+set -a; source ../.env; set +a   # carga las contraseñas del .env
+uv run uvicorn app.main:app --reload --port 8000   # documentación en http://localhost:8000/docs
 uv run pytest                     # pruebas
 ```
 
-Las pruebas usan siempre una base temporal (`tests/conftest.py`), así que no tocan `backend/data/signos_vitales.db`.
+Las pruebas usan siempre una base temporal y contraseñas de prueba (`tests/conftest.py`), así que no tocan `backend/data/signos_vitales.db` ni necesitan el `.env`.
 
 Frontend, sin Docker:
 

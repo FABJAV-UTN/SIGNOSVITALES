@@ -1,4 +1,6 @@
 from datetime import datetime, timedelta
+import os
+import secrets
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -8,7 +10,22 @@ import bcrypt
 
 from .schemas import LoginRequest, LoginResponse
 
-SECRET_KEY = "cruzroja-local-secret-2026"
+# Las credenciales NO están en el código: se leen de variables de entorno
+# (archivo .env en la raíz del proyecto, que no se sube al repositorio).
+# Ver .env.example.
+def _env_obligatoria(nombre: str) -> str:
+    valor = os.getenv(nombre, "").strip()
+    if not valor:
+        raise RuntimeError(
+            f"Falta la variable de entorno {nombre}. "
+            "Copiá .env.example como .env en la raíz del proyecto y completá las contraseñas."
+        )
+    return valor
+
+
+# Clave para firmar los JWT. Si no se define, se genera una al azar en cada arranque
+# (es segura, pero al reiniciar el backend todos tienen que volver a iniciar sesión).
+SECRET_KEY = os.getenv("SISVAP_SECRET_KEY", "").strip() or secrets.token_urlsafe(48)
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 24 * 60
 
@@ -18,11 +35,11 @@ def _hash_password(plain: str) -> str:
 
 USERS = {
     "voluntario": {
-        "hashed_password": _hash_password("cruzroja2024"),
+        "hashed_password": _hash_password(_env_obligatoria("SISVAP_VOLUNTARIO_PASSWORD")),
         "role": "voluntario",
     },
     "admin": {
-        "hashed_password": _hash_password("admin2024"),
+        "hashed_password": _hash_password(_env_obligatoria("SISVAP_ADMIN_PASSWORD")),
         "role": "admin",
     },
 }

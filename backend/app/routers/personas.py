@@ -36,7 +36,7 @@ async def _persona_ya_existe(nombre: str, apellido: str, dni: str, db: AsyncSess
     return False, None
 
 
-@router.post("", response_model=PersonaRead, status_code=201)
+@router.post("", response_model=PersonaRead, status_code=201, dependencies=[Depends(get_current_user)])
 async def crear_persona(persona_in: PersonaCreate, db: AsyncSession = Depends(get_session)):
     existing = await db.execute(select(Persona).where(Persona.dni == persona_in.dni))
     if existing.scalar_one_or_none() is not None:
@@ -139,7 +139,7 @@ async def cargar_personas_bulk(
     return {"ok": ok_count, "total": len(bulk_request.rows), "errores": errores, "creadas": creadas}
 
 
-@router.get("", response_model=list[PersonaListItem])
+@router.get("", response_model=list[PersonaListItem], dependencies=[Depends(get_current_user)])
 async def listar_personas(
     q: str | None = Query(None),
     limit: int | None = Query(None, ge=1, le=500),
@@ -195,7 +195,7 @@ async def listar_personas(
     return personas
 
 
-@router.get("/{dni}", response_model=PersonaRead)
+@router.get("/{dni}", response_model=PersonaRead, dependencies=[Depends(get_current_user)])
 async def obtener_persona(dni: str, db: AsyncSession = Depends(get_session)):
     dni_clean = re.sub(r"[\s.-]", "", dni.strip())
     resultado = await db.execute(select(Persona).where(or_(Persona.dni == dni, Persona.dni == dni_clean)))

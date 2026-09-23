@@ -7,13 +7,20 @@ services:
     container_name: vital_backend
     volumes:
       - ./backend/data:/app/data
-    ports:
-      - "8000:8000"
+    # Sin "ports": el backend solo es accesible dentro de la red de Docker.
+    # El frontend (Nginx) le pasa las peticiones /api/. Así nadie de la red wifi
+    # puede consultar la API directamente en el puerto 8000.
+    expose:
+      - "8000"
     restart: unless-stopped
     networks:
       - vital-net
     environment:
       - TZ=America/Argentina/Buenos_Aires
+      # Se leen del archivo .env de la raíz del proyecto (ver .env.example).
+      - SISVAP_ADMIN_PASSWORD=${SISVAP_ADMIN_PASSWORD:?Falta SISVAP_ADMIN_PASSWORD en .env (copiá .env.example como .env)}
+      - SISVAP_VOLUNTARIO_PASSWORD=${SISVAP_VOLUNTARIO_PASSWORD:?Falta SISVAP_VOLUNTARIO_PASSWORD en .env (copiá .env.example como .env)}
+      - SISVAP_SECRET_KEY=${SISVAP_SECRET_KEY:-}
 
   frontend:
     build:
