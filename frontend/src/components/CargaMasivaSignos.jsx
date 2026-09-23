@@ -1,5 +1,6 @@
 import { useState } from "react";
 import api from "../api";
+import RevisionCargaSignos from "./RevisionCargaSignos";
 import { formatExcelDate, readExcelRows } from "../utils/excelDates";
 
 const normalizeHeader = (value) =>
@@ -48,37 +49,56 @@ const HEADER_ALIASES = {
 };
 
 const findHeaderKey = (normalizedHeader) => {
-  return Object.entries(HEADER_ALIASES).find(([key, aliases]) => aliases.includes(normalizedHeader))?.[0];
+  return Object.entries(HEADER_ALIASES).find(([, aliases]) => aliases.includes(normalizedHeader))?.[0];
 };
 
-export default function CargaMasivaSignos() {
-  const [payload, setPayload] = useState(
-    JSON.stringify(
+const EJEMPLO_PAYLOAD = JSON.stringify(
+  {
+    operativo_id: null,
+    lugar_custom: null,
+    rows: [
       {
-        operativo_id: null,
-        lugar_custom: null,
-        rows: [
-          {
-            identificador: "12345678",
-            signos: "120/80-75-98.5",
-            fecha: "2026-06-04",
-          },
-        ],
+        identificador: "12345678",
+        signos: "120/80-75-98.5",
+        fecha: "2026-06-04",
       },
-      null,
-      2
-    )
-  );
+    ],
+  },
+  null,
+  2
+);
+
+function detalleError(err, porDefecto) {
+  const detail = err.response?.data?.detail;
+  if (Array.isArray(detail)) {
+    return detail.map((e) => (e.loc ? `${e.loc[e.loc.length - 1]}: ${e.msg}` : e.msg)).join(" — ");
+  }
+  if (typeof detail === "string") return detail;
+  return porDefecto;
+}
+
+/** Parsea el JSON y le pone a cada fila su número ("fila") si no lo trae. */
+function parsearPayload(texto) {
+  const data = JSON.parse(texto);
+  if (!data.rows || !Array.isArray(data.rows) || data.rows.length === 0) {
+    throw new Error("Debe incluir una lista de filas en el campo rows.");
+  }
+  return { ...data, rows: data.rows.map((row, i) => ({ ...row, fila: row?.fila ?? i + 1 })) };
+}
+
+export default function CargaMasivaSignos() {
+  const [payload, setPayload] = useState(EJEMPLO_PAYLOAD);
   const [fileName, setFileName] = useState("");
   const [fileError, setFileError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const [errores, setErrores] = useState([]);
-  const [okCount, setOkCount] = useState(null);
+  const [revision, setRevision] = useState(null); // { data, preview }
+  const [resultado, setResultado] = useState(null);
 
   const handleFileChange = async (event) => {
     setFileError("");
+    setRevision(null);
+    setResultado(null);
     const file = event.target.files?.[0];
     if (!file) return;
     setFileName(file.name);
@@ -113,7 +133,7 @@ export default function CargaMasivaSignos() {
           throw new Error(`Faltan columnas en el archivo: ${missing.join(", ")}`);
         }
 
-        const rows = filteredRows.map((rawRow) => {
+        const rows = filteredRows.map((rawRow, i) => {
           const identificador = rawRow[keyMap.identificador]?.toString().trim();
           const fecha = formatExcelDate(rawRow[keyMap.fecha], { date1904 });
           const presion_arterial = rawRow[keyMap.presion_arterial]?.toString().trim();
@@ -122,6 +142,8 @@ export default function CargaMasivaSignos() {
           const operativo_id = keyMap.operativo_id ? rawRow[keyMap.operativo_id] : null;
           const lugar_custom = keyMap.lugar_custom ? rawRow[keyMap.lugar_custom]?.toString().trim() : null;
           return {
+            // Número de fila del Excel (SheetJS guarda la fila real en __rowNum__, base 0).
+            fila: typeof rawRow.__rowNum__ === "number" ? rawRow.__rowNum__ + 1 : i + 2,
             identificador,
             signos: `${presion_arterial}-${frecuencia_cardiaca}-${oxigenacion_sangre}`,
             fecha,
@@ -130,7 +152,9 @@ export default function CargaMasivaSignos() {
           };
         });
 
-        setPayload(JSON.stringify({ operativo_id: null, lugar_custom: null, rows }, null, 2));
+        const texto = JSON.stringify({ operativo_id: null, lugar_custom: null, rows }, null, 2);
+        setPayload(texto);
+        revisar(texto);
       } catch (err) {
         setFileError(err.message || "No se pudo leer el archivo Excel.");
       }
@@ -141,53 +165,30 @@ export default function CargaMasivaSignos() {
     reader.readAsArrayBuffer(file);
   };
 
-  async function handleSubmit(event) {
-    event.preventDefault();
+  async function revisar(texto = payload) {
     setError("");
-    setMessage("");
-    setErrores([]);
-    setOkCount(null);
-
+    setResultado(null);
     let data;
     try {
-      data = JSON.parse(payload);
+      data = parsearPayload(texto);
     } catch (err) {
-      setError("El JSON no es válido. Verifique la estructura y la sintaxis.");
+      setError(err instanceof SyntaxError ? "El JSON no es válido. Verifique la estructura y la sintaxis." : err.message);
       return;
     }
-
-    if (!data.rows || !Array.isArray(data.rows) || data.rows.length === 0) {
-      setError("Debe incluir una lista de filas en el campo rows.");
-      return;
-    }
-
     setLoading(true);
     try {
-      const response = await api.post("/signos/bulk", data);
-      setOkCount(response.data.ok);
-      setErrores(response.data.errores || []);
-      if ((response.data.errores || []).length > 0 && response.data.ok === 0) {
-        setError("La carga no pudo completarse. Revisá los errores detallados abajo.");
-      } else {
-        setError("");
-      }
-      setMessage(
-        response.data.ok > 0
-          ? `Carga finalizada: ${response.data.ok} fila(s) procesada(s).`
-          : "No se pudo guardar ninguna fila. Revisá los errores."
-      );
+      const response = await api.post("/signos/bulk/preview", data);
+      setRevision({ data, preview: response.data });
     } catch (err) {
-      const detail = err.response?.data?.detail;
-      if (Array.isArray(detail)) {
-        setError(detail.map((e) => (e.loc ? `${e.loc[e.loc.length - 1]}: ${e.msg}` : e.msg)).join(" — "));
-      } else if (typeof detail === "string") {
-        setError(detail);
-      } else {
-        setError("Error al cargar registros masivos.");
-      }
+      setError(detalleError(err, "No se pudo revisar la carga."));
     } finally {
       setLoading(false);
     }
+  }
+
+  function terminar(res) {
+    setRevision(null);
+    setResultado(res);
   }
 
   return (
@@ -197,9 +198,13 @@ export default function CargaMasivaSignos() {
           <h1>Carga masiva de signos</h1>
         </div>
         <p>
-          Sube un archivo Excel (.xls/.xlsx) con una fila por persona. La primera columna puede
-          ser DNI o Nombre y Apellido juntos. El archivo debe tener columnas: Identificador,
-          Fecha, Presión arterial, Frecuencia cardíaca y Oxigenación.
+          Sube un archivo Excel (.xls/.xlsx) con una fila por medición. La primera columna puede
+          ser DNI o Nombre y Apellido. El archivo debe tener columnas: Identificador, Fecha,
+          Presión arterial, Frecuencia cardíaca y Oxigenación.
+        </p>
+        <p className="text-muted">
+          Antes de guardar se muestra una revisión: vas a confirmar los nombres parecidos y elegir
+          a quién crear si no está en la base.
         </p>
         <label>
           Seleccionar archivo Excel
@@ -207,44 +212,76 @@ export default function CargaMasivaSignos() {
         </label>
         {fileName && <p>Archivo seleccionado: {fileName}</p>}
         {fileError && <div className="alert alert-error">{fileError}</div>}
-        <form onSubmit={handleSubmit}>
+
+        <details className="json-details">
+          <summary>Ver / editar JSON (avanzado)</summary>
           <label>
             JSON de carga masiva
             <textarea
               value={payload}
-              onChange={(e) => setPayload(e.target.value)}
-              rows={18}
+              onChange={(e) => {
+                setPayload(e.target.value);
+                setRevision(null);
+              }}
+              rows={14}
               spellCheck="false"
               className="textarea-monospace"
-              required
             />
           </label>
-          {error && <div className="alert alert-error">{error}</div>}
-          {message && <div className="alert alert-success">{message}</div>}
-          <button type="submit" className="button button-primary" disabled={loading}>
-            {loading ? "Cargando..." : "Ejecutar carga masiva"}
-          </button>
-        </form>
+        </details>
 
-        {okCount !== null && (
-          <div className="card card-secondary">
-            <h2>Resultado de la carga</h2>
-            <p>Filas guardadas: {okCount}</p>
-            {errores.length > 0 ? (
-              <div>
-                <p>Errores encontrados:</p>
-                <ul>
-                  {errores.map((item, index) => (
-                    <li key={`${item}-${index}`}>{item}</li>
-                  ))}
-                </ul>
-              </div>
-            ) : (
-              <p>No se encontraron errores.</p>
-            )}
-          </div>
+        {error && <div className="alert alert-error">{error}</div>}
+        {!revision && (
+          <button type="button" className="button button-primary" disabled={loading} onClick={() => revisar()}>
+            {loading ? "Revisando..." : "Revisar carga"}
+          </button>
         )}
       </section>
+
+      {revision && (
+        <RevisionCargaSignos
+          key={JSON.stringify(revision.preview.identificadores.map((r) => r.identificador))}
+          data={revision.data}
+          preview={revision.preview}
+          onCancelar={() => setRevision(null)}
+          onTerminado={terminar}
+        />
+      )}
+
+      {resultado && (
+        <section className="card card-secondary">
+          <h2>Resultado de la carga</h2>
+          <p>
+            <strong>Filas guardadas: {resultado.ok}</strong>
+            {resultado.omitidas > 0 && <> · Filas no cargadas por decisión tuya: {resultado.omitidas}</>}
+          </p>
+          {resultado.creadas.length > 0 && (
+            <div>
+              <p>Personas creadas ({resultado.creadas.length}):</p>
+              <ul>
+                {resultado.creadas.map((p) => (
+                  <li key={p.id}>
+                    {p.nombre} {p.apellido} — DNI {p.dni}
+                    {p.provisorio ? " (sin DNI en la planilla: se asignó uno provisorio)" : ""}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {resultado.errores.length > 0 ? (
+            <div>
+              <p>Errores encontrados:</p>
+              <ul>
+                {resultado.errores.map((item, index) => (
+                  <li key={`${item}-${index}`}>{item}</li>
+                ))}
+              </ul>
+            </div>
+          ) : (
+            <p>No se encontraron errores.</p>
+          )}
+        </section>
+      )}
     </main>
   );
 }

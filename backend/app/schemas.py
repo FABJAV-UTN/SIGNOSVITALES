@@ -215,10 +215,20 @@ class PersonaBulkRequest(BaseModel):
     # en vez de rechazar todo el archivo con un 422.
     rows: list[Optional[dict[str, Any]]]
 
+class PersonaCreada(BaseModel):
+    fila: int
+    id: int
+    nombre: str
+    apellido: str
+    dni: str
+
 class PersonaBulkResponse(BaseModel):
     ok: int
     total: int
     errores: list[str]
+    # Personas efectivamente creadas, con el número de fila del request (1-based),
+    # para que el frontend pueda asociarlas (ej. carga masiva de signos).
+    creadas: list[PersonaCreada] = []
 
 class OperativoUpdate(BaseModel):
     lugar: constr(strip_whitespace=True, min_length=3)
@@ -289,6 +299,10 @@ class SignosRead(BaseModel):
     model_config = {"from_attributes": True}
 
 class SignosBulkRow(BaseModel):
+    # Si viene persona_id (ya resuelto en la revisión previa), se usa directo y no se busca por identificador.
+    persona_id: Optional[int] = None
+    # Número de fila original del archivo, para que los errores coincidan con el Excel.
+    fila: Optional[int] = None
     identificador: Optional[str] = None
     dni: Optional[constr(pattern=DNI_REGEX)] = None
     signos: constr(strip_whitespace=True, min_length=1)
@@ -304,6 +318,9 @@ class SignosBulkRow(BaseModel):
     @model_validator(mode="after")
     def ensure_identificador(cls, values):
         identificador = values.identificador or values.dni
+        if values.persona_id is not None and (not identificador or not identificador.strip()):
+            values.identificador = f"persona #{values.persona_id}"
+            return values
         if not identificador or not identificador.strip():
             raise ValueError("Debe proporcionar DNI o Nombre y Apellido en la primera columna.")
         values.identificador = identificador.strip()
@@ -369,3 +386,37 @@ class SignosRecord(BaseModel):
     lugar: str
 
     model_config = {"from_attributes": True}
+
+# ---------- Revisión previa de la carga masiva de signos ----------
+
+class PersonaCandidata(BaseModel):
+    id: int
+    nombre: str
+    apellido: str
+    dni: str
+    similitud: float
+
+class IdentificadorRevision(BaseModel):
+    identificador: str
+    filas: list[int]
+    # "exacta": coincide con una sola persona -> se carga directo.
+    # "sugerencia": no coincide exacto, pero hay personas parecidas -> hay que confirmar.
+    # "ambigua": coincide exacto con más de una persona -> hay que elegir.
+    # "no_encontrada": no hay nadie parecido -> se puede crear la persona.
+    estado: str
+    persona: Optional[PersonaCandidata] = None
+    candidatos: list[PersonaCandidata] = []
+    nombre_sugerido: str = ""
+    apellido_sugerido: str = ""
+    # Para "no_encontrada": otro identificador del mismo archivo que parece la misma persona
+    # (ej. "Marelo Tercero" -> "Marcelo Tercero"), para no crearla dos veces.
+    parecido_a: Optional[str] = None
+
+class FilaInvalida(BaseModel):
+    fila: int
+    error: str
+
+class SignosBulkPreviewResponse(BaseModel):
+    total_filas: int
+    identificadores: list[IdentificadorRevision]
+    invalidas: list[FilaInvalida]

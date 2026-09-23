@@ -56,7 +56,23 @@ async def cargar_personas_bulk(
 ):
     ok_count = 0
     errores: list[str] = []
+    creadas: list[dict] = []
     seen: set[tuple[str, str, str]] = set()
+    # DNI provisorio para quien no tiene: 9xxxxxxx, siempre el siguiente libre (antes se usaba
+    # 90000000 + número de fila, que chocaba entre una carga y otra).
+    dnis_existentes = set((await db.execute(select(Persona.dni))).scalars().all())
+    proximo_provisorio = max(
+        [int(d) for d in dnis_existentes if d.isdigit() and 90000000 <= int(d) < 100000000] + [90000000]
+    ) + 1
+
+    def nuevo_dni_provisorio() -> str:
+        nonlocal proximo_provisorio
+        while str(proximo_provisorio) in dnis_existentes:
+            proximo_provisorio += 1
+        dni_nuevo = str(proximo_provisorio)
+        dnis_existentes.add(dni_nuevo)
+        proximo_provisorio += 1
+        return dni_nuevo
 
     if not bulk_request.rows:
         return {"ok": 0, "total": 0, "errores": ["No se recibieron filas para procesar."]}
@@ -80,7 +96,7 @@ async def cargar_personas_bulk(
         if isinstance(normalized_row.get("dni"), str):
             normalized_row["dni"] = normalized_row["dni"].strip()
         if normalized_row.get("dni") in (None, ""):
-            normalized_row["dni"] = f"{90000000 + index}"
+            normalized_row["dni"] = nuevo_dni_provisorio()
         if normalized_row.get("nombre") in (None, ""):
             normalized_row["nombre"] = f"Persona {index}"
         if normalized_row.get("apellido") in (None, ""):
@@ -115,10 +131,12 @@ async def cargar_personas_bulk(
             situacion_de_calle=row.situacion_de_calle,
         )
         db.add(persona)
+        await db.flush()
+        creadas.append({"fila": index, "id": persona.id, "nombre": nombre, "apellido": apellido, "dni": dni})
         ok_count += 1
 
     await db.commit()
-    return {"ok": ok_count, "total": len(bulk_request.rows), "errores": errores}
+    return {"ok": ok_count, "total": len(bulk_request.rows), "errores": errores, "creadas": creadas}
 
 
 @router.get("", response_model=list[PersonaListItem])
