@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, NavLink } from "react-router-dom";
 import { useAuth } from "./AuthContext";
 
@@ -17,9 +17,22 @@ const navItems = [
 export default function Navbar() {
   const [open, setOpen] = useState(false);
   const { token, logout, isAdmin } = useAuth();
+  const headerRef = useRef(null);
+
+  // Publica la altura real de la navbar (cambia según el ancho) para los paneles "sticky".
+  useEffect(() => {
+    const el = headerRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return undefined;
+    const actualizar = () =>
+      document.documentElement.style.setProperty("--navbar-height", `${el.getBoundingClientRect().height}px`);
+    actualizar();
+    const observer = new ResizeObserver(actualizar);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   return (
-    <header className="navbar">
+    <header className="navbar" ref={headerRef}>
       <div className="navbar-brand">
         <Link to="/dashboard" className="brand-link">
           Cruz Roja / Signos Vitales

@@ -264,3 +264,500 @@ td {
     display: inline-flex;
   }
 }
+
+/* ---------- Botones extra ---------- */
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
+/* Botón secundario para fondos claros (el .button-secondary es para la navbar roja). */
+.button-outline {
+  background: white;
+  color: var(--primary);
+  border: 1px solid var(--primary);
+}
+
+.button-outline:hover {
+  background: rgba(227, 0, 15, 0.06);
+}
+
+.button-small {
+  min-height: 36px;
+  padding: 0.45rem 0.8rem;
+  font-size: 0.9rem;
+}
+
+.icon-button {
+  background: transparent;
+  border: none;
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 0.4rem;
+  border-radius: 6px;
+  color: var(--muted);
+}
+
+.icon-button:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.small {
+  font-size: 0.8rem;
+}
+
+/* ---------- Layout con panel lateral ---------- */
+.page-wide {
+  max-width: 1400px;
+}
+
+.search-card h1 {
+  margin-top: 0;
+}
+
+.search-form {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-end;
+}
+
+.search-form label {
+  flex: 1;
+  margin-bottom: 0;
+}
+
+.section-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.section-header h2 {
+  margin: 0 0 0.75rem;
+}
+
+.split-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 400px);
+  gap: 1rem;
+  align-items: start;
+}
+
+.historial-layout {
+  grid-template-columns: minmax(300px, 380px) minmax(0, 1fr);
+}
+
+.historial-layout .split-side {
+  order: -1;
+}
+
+.split-main,
+.split-side {
+  min-width: 0;
+}
+
+/* El panel lateral queda fijo en pantalla mientras se scrollea. */
+.sticky-card {
+  position: sticky;
+  top: calc(var(--navbar-height, 72px) + 1rem);
+  max-height: calc(100vh - var(--navbar-height, 72px) - 2rem);
+  overflow-y: auto;
+  margin-bottom: 0;
+}
+
+.empty-panel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 160px;
+  text-align: center;
+}
+
+/* La tabla tiene su propio scroll, así no se mueve el resto de la página. */
+.table-scroll-y {
+  max-height: calc(100vh - 300px);
+  min-height: 240px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: white;
+}
+
+.table-scroll-y thead th {
+  position: sticky;
+  top: 0;
+  background: #f1f1f1;
+  z-index: 1;
+}
+
+th.num,
+td.num {
+  text-align: center;
+  white-space: nowrap;
+}
+
+.persona-row {
+  cursor: pointer;
+}
+
+.persona-row:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+.persona-row.selected {
+  background: rgba(227, 0, 15, 0.09);
+  box-shadow: inset 3px 0 0 var(--primary);
+}
+
+.count-badge {
+  display: inline-block;
+  min-width: 2rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: #e7f5e8;
+  color: #1f6f34;
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.count-badge.count-zero {
+  background: #f0f0f0;
+  color: #9a9a9a;
+  font-weight: 400;
+}
+
+/* ---------- Ficha de persona ---------- */
+.persona-panel h3 {
+  margin: 0 0 0.2rem;
+}
+
+.persona-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.stat-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+
+.stat {
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.7rem 0.8rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.stat-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.stat-label {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.persona-datos {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.35rem 1rem;
+  margin: 0;
+}
+
+.persona-datos dt {
+  color: var(--muted);
+}
+
+.persona-datos dd {
+  margin: 0;
+}
+
+.kits-block {
+  margin-top: 1.25rem;
+  border-top: 1px solid var(--border);
+  padding-top: 1rem;
+}
+
+.kits-block h4 {
+  margin: 0 0 0.5rem;
+}
+
+.kits-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.kits-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.55rem 0.8rem;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.kit-badge {
+  padding: 0.2rem 0.55rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.kit-abrigo {
+  background: #e0e7ff;
+  color: #3730a3;
+}
+
+.kit-otro {
+  background: #dcfce7;
+  color: #166534;
+}
+
+/* ---------- Selector de género ---------- */
+.choice-group {
+  border: none;
+  padding: 0;
+  margin: 0 0 1rem;
+}
+
+.choice-group legend {
+  padding: 0;
+  margin-bottom: 0.45rem;
+}
+
+.choice-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.card-form .choice-pill {
+  display: inline-flex;
+  width: auto;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0.6rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: white;
+  cursor: pointer;
+  user-select: none;
+}
+
+.card-form .choice-pill input {
+  display: inline-block;
+  width: auto;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--primary);
+}
+
+.card-form .choice-pill.selected {
+  border-color: var(--primary);
+  background: rgba(227, 0, 15, 0.07);
+}
+
+.choice-label {
+  font-weight: 600;
+}
+
+.choice-hint {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+/* ---------- Autocompletado ---------- */
+.autocomplete {
+  position: relative;
+}
+
+.autocomplete-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 15;
+  list-style: none;
+  margin: 0;
+  padding: 0.3rem;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.autocomplete-list li {
+  display: flex;
+  flex-direction: column;
+  padding: 0.55rem 0.75rem;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.autocomplete-list li.active {
+  background: rgba(227, 0, 15, 0.08);
+}
+
+.autocomplete-list .autocomplete-empty {
+  color: var(--muted);
+  cursor: default;
+}
+
+.ac-nombre {
+  font-weight: 600;
+}
+
+.ac-meta {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+/* ---------- Filtros de fecha ---------- */
+.date-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: flex-end;
+  margin-bottom: 1rem;
+}
+
+.date-filters label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.9rem;
+}
+
+.date-filters input {
+  padding: 0.55rem 0.7rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: white;
+}
+
+/* ---------- Pestañas (solo celular) ---------- */
+.tabs-mobile {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .split-layout,
+  .historial-layout {
+    grid-template-columns: 1fr;
+  }
+
+  /* En Buscar persona, la ficha seleccionada va arriba de la tabla. */
+  .split-side {
+    order: -1;
+  }
+
+  .split-layout:not(.has-selection) .split-side {
+    display: none;
+  }
+
+  .sticky-card {
+    position: static;
+    max-height: none;
+  }
+
+  .table-scroll-y {
+    max-height: 60vh;
+  }
+
+  .search-form {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .tabs-mobile {
+    display: flex;
+    position: sticky;
+    top: var(--navbar-height, 72px);
+    z-index: 10;
+    background: var(--bg);
+    padding: 0.25rem 0 0.75rem;
+    gap: 0.5rem;
+  }
+
+  .tabs-mobile button {
+    flex: 1;
+    padding: 0.7rem;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: white;
+    font-weight: 600;
+  }
+
+  .tabs-mobile button.active {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: white;
+  }
+
+  .historial-layout .tab-pane {
+    display: none;
+  }
+
+  .historial-layout .tab-pane.tab-active {
+    display: block;
+  }
+}
+
+/* ---------- Ajustes varios ---------- */
+.block {
+  display: block;
+}
+
+.mobile-only {
+  display: none;
+}
+
+.split-side {
+  scroll-margin-top: calc(var(--navbar-height, 72px) + 0.5rem);
+}
+
+.card-form .checkbox-label input {
+  display: inline-block;
+  width: auto;
+  margin: 0;
+}
+
+@media (max-width: 600px) {
+  .mobile-only {
+    display: inline;
+  }
+
+  .mobile-only .block {
+    display: block;
+  }
+
+  .desktop-only {
+    display: none;
+  }
+
+  th,
+  td {
+    padding: 0.6rem 0.55rem;
+  }
+}

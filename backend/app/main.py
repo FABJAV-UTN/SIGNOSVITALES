@@ -5,7 +5,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select
 
 from .auth import router as auth_router
-from .database import AsyncSessionLocal, get_session, init_db
+from .database import AsyncSessionLocal, engine, get_session, init_db
+from .migrations import run_data_migrations
 from .models import Operativo
 from .routers.kits import router as kits_router
 from .routers.operativos import router as operativos_router
@@ -47,4 +48,5 @@ async def ensure_operativo() -> None:
 @app.on_event("startup")
 async def startup_event() -> None:
     await init_db()
+    await run_data_migrations(engine)
     await ensure_operativo()

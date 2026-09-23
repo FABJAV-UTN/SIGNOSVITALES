@@ -1,6 +1,7 @@
 from datetime import date, datetime, time, timedelta
 from enum import Enum
 import re
+import unicodedata
 from typing import Any, List, Optional
 
 from pydantic import BaseModel, Field, ValidationError, conint, constr, confloat, field_validator, model_validator
@@ -71,6 +72,55 @@ def _normalize_date_value(value: Any) -> Any:
     return value
 
 
+GENEROS_VALIDOS = ("V", "M", "No binario")
+
+_GENERO_ALIASES = {
+    "v": "V", "varon": "V", "masculino": "V", "hombre": "V", "h": "V",
+    "m": "M", "mujer": "M", "femenino": "M", "f": "M",
+    "no binario": "No binario", "no-binario": "No binario", "nobinario": "No binario", "nb": "No binario", "x": "No binario",
+}
+
+
+def _strip_accents(text: str) -> str:
+    return "".join(ch for ch in unicodedata.normalize("NFD", text) if unicodedata.category(ch) != "Mn")
+
+
+def normalize_genero(value: Any, strict: bool = True) -> Optional[str]:
+    """Normaliza el género a uno de GENEROS_VALIDOS: 'V' (varón), 'M' (mujer) o 'No binario'.
+
+    OJO: 'M' significa MUJER. Con strict=True un valor desconocido lanza ValueError;
+    con strict=False se devuelve tal cual (para leer datos viejos sin romper listados).
+    """
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    key = _strip_accents(text).casefold()
+    key = re.sub(r"\s+", " ", key)
+    if key in _GENERO_ALIASES:
+        return _GENERO_ALIASES[key]
+    if strict:
+        raise ValueError("género inválido: usar 'V' (varón), 'M' (mujer) o 'No binario'")
+    return text
+
+
+def format_validation_errors(exc: ValidationError) -> str:
+    """Arma un mensaje legible por fila, indicando campo y valor recibido."""
+    partes = []
+    for error in exc.errors():
+        campo = ".".join(str(p) for p in error.get("loc", ())) or "fila"
+        valor = error.get("input")
+        if campo in ("fecha", "fecha_nacimiento"):
+            if valor in (None, ""):
+                partes.append(f"{campo}: falta la fecha")
+            else:
+                partes.append(f"{campo}: fecha inválida '{valor}' (usar AAAA-MM-DD o DD/MM/AAAA)")
+        else:
+            partes.append(f"{campo}: {error['msg']}")
+    return ", ".join(partes)
+
+
 class LoginRequest(BaseModel):
     username: constr(strip_whitespace=True, min_length=3)
     password: constr(strip_whitespace=True, min_length=6)
@@ -85,7 +135,7 @@ class PersonaCreate(BaseModel):
     apellido: constr(strip_whitespace=True, min_length=2)
     dni: constr(pattern=DNI_REGEX)
     fecha_nacimiento: Optional[date] = None
-    genero: Optional[str] = None
+    genero: Optional[str] = Field(default=None, description="'V' (varón), 'M' (mujer) o 'No binario'")
     situacion_de_calle: bool = False
 
     @field_validator("dni", mode="before")
@@ -103,10 +153,7 @@ class PersonaCreate(BaseModel):
     @field_validator("genero", mode="before")
     @classmethod
     def clean_genero(cls, v: Any) -> Optional[str]:
-        if isinstance(v, str):
-            val = v.strip()
-            return val if val else None
-        return v
+        return normalize_genero(v, strict=True)
 
 class PersonaRead(PersonaCreate):
     id: int
@@ -114,12 +161,22 @@ class PersonaRead(PersonaCreate):
 
     model_config = {"from_attributes": True}
 
+    @field_validator("genero", mode="before")
+    @classmethod
+    def clean_genero(cls, v: Any) -> Optional[str]:
+        # Al leer de la base no se rechaza nada: si quedara un valor viejo, se muestra tal cual.
+        return normalize_genero(v, strict=False)
+
+class PersonaListItem(PersonaRead):
+    total_signos: int = 0
+    total_kits: int = 0
+
 class PersonaBulkRow(BaseModel):
     nombre: Optional[constr(strip_whitespace=True, min_length=1)] = None
     apellido: Optional[constr(strip_whitespace=True, min_length=1)] = None
     dni: Optional[constr(pattern=DNI_REGEX)] = None
     fecha_nacimiento: Optional[date] = None
-    genero: Optional[constr(strip_whitespace=True, min_length=1)] = None
+    genero: Optional[str] = None
     situacion_de_calle: bool = False
 
     @field_validator("nombre", "apellido", mode="before")
@@ -150,13 +207,13 @@ class PersonaBulkRow(BaseModel):
     @field_validator("genero", mode="before")
     @classmethod
     def clean_genero(cls, v: Any) -> Optional[str]:
-        if isinstance(v, str):
-            val = v.strip()
-            return val if val else None
-        return v
+        return normalize_genero(v, strict=True)
 
 class PersonaBulkRequest(BaseModel):
-    rows: list[PersonaBulkRow]
+    # Las filas se reciben sin validar y se validan una por una en el endpoint,
+    # así un dato inválido (ej. una fecha mal formada) solo descarta esa fila
+    # en vez de rechazar todo el archivo con un 422.
+    rows: list[Optional[dict[str, Any]]]
 
 class PersonaBulkResponse(BaseModel):
     ok: int
@@ -253,7 +310,8 @@ class SignosBulkRow(BaseModel):
         return values
 
 class SignosBulkRequest(BaseModel):
-    rows: list[SignosBulkRow]
+    # Ver comentario en PersonaBulkRequest: validación por fila en el endpoint.
+    rows: list[Optional[dict[str, Any]]]
     operativo_id: Optional[int] = None
     lugar_custom: Optional[constr(strip_whitespace=True, min_length=3)] = None
 

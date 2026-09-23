@@ -1,6 +1,7 @@
 import { useState } from "react";
-import * as XLSX from "xlsx";
 import api from "../api";
+import { formatExcelDate, readExcelRows } from "../utils/excelDates";
+import { normalizarGenero, usaConvencionMF } from "../utils/genero";
 
 const normalizeHeader = (value) =>
   value
@@ -30,70 +31,6 @@ const parseBooleanValue = (value) => {
   return ["true", "1", "si", "sí", "yes", "s", "y"].includes(text);
 };
 
-const formatExcelDate = (value) => {
-  if (value === null || value === undefined || value === "") {
-    return "";
-  }
-
-  const toIsoDate = (date) => {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, "0");
-    const day = String(date.getDate()).padStart(2, "0");
-    return `${year}-${month}-${day}`;
-  };
-
-  if (value instanceof Date) {
-    return toIsoDate(value);
-  }
-
-  if (typeof value === "number" && Number.isFinite(value)) {
-    const excelEpoch = new Date(Date.UTC(1899, 11, 30));
-    const parsed = new Date(excelEpoch.getTime() + value * 24 * 60 * 60 * 1000);
-    return toIsoDate(parsed);
-  }
-
-  const text = value.toString().trim();
-  if (!text) return "";
-
-  const compact = text.replace(/T/g, " ").replace(/Z$/i, "").replace(/\s+/g, " ").trim();
-
-  if (/^\d{5,7}(?:\.\d+)?$/.test(compact)) {
-    const numeric = Number(compact);
-    if (Number.isFinite(numeric)) {
-      const excelEpoch = new Date(Date.UTC(1899, 11, 30));
-      const parsed = new Date(excelEpoch.getTime() + numeric * 24 * 60 * 60 * 1000);
-      return toIsoDate(parsed);
-    }
-  }
-
-  const isoMatch = compact.match(/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?$/);
-  if (isoMatch) {
-    const [, year, month, day] = isoMatch;
-    return `${year}-${String(Number(month)).padStart(2, "0")}-${String(Number(day)).padStart(2, "0")}`;
-  }
-
-  const localMatch = compact.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?$/);
-  if (localMatch) {
-    const [, day, month, yearRaw] = localMatch;
-    const year = yearRaw.length === 2 ? (Number(yearRaw) < 50 ? 2000 + Number(yearRaw) : 1900 + Number(yearRaw)) : Number(yearRaw);
-    return `${year}-${String(Number(month)).padStart(2, "0")}-${String(Number(day)).padStart(2, "0")}`;
-  }
-
-  const out = compact.match(/^(\d{1,2})\s*\/\s*(\d{1,2})\s*\/\s*(\d{2,4})$/);
-  if (out) {
-    const [, day, month, yearRaw] = out;
-    const year = yearRaw.length === 2 ? (Number(yearRaw) < 50 ? 2000 + Number(yearRaw) : 1900 + Number(yearRaw)) : Number(yearRaw);
-    return `${year}-${String(Number(month)).padStart(2, "0")}-${String(Number(day)).padStart(2, "0")}`;
-  }
-
-  const parsed = new Date(compact);
-  if (!Number.isNaN(parsed.getTime())) {
-    return toIsoDate(parsed);
-  }
-
-  return compact;
-};
-
 const formatExcelValue = (value) => {
   if (value === null || value === undefined || value === "") {
     return "";
@@ -120,7 +57,7 @@ export default function CargaMasivaPersonas() {
             apellido: "Pérez",
             dni: "12345678",
             fecha_nacimiento: "1990-05-10",
-            genero: "Masculino",
+            genero: "V",
             situacion_de_calle: false,
           },
         ],
@@ -147,10 +84,9 @@ export default function CargaMasivaPersonas() {
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
-        const data = new Uint8Array(e.target.result);
-        const workbook = XLSX.read(data, { type: "array", cellDates: true });
-        const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        const rawRows = XLSX.utils.sheet_to_json(sheet, { defval: "", raw: false });
+        // Se leen los valores reales de las celdas (no el texto formateado) para que
+        // el formato de fecha de la planilla (dd/mm, mm/dd, etc.) no afecte el resultado.
+        const { rows: rawRows, date1904 } = readExcelRows(e.target.result);
         const filteredRows = rawRows.filter((row) =>
           Object.values(row || {}).some((value) => value !== null && value !== undefined && String(value).trim() !== "")
         );
@@ -175,6 +111,10 @@ export default function CargaMasivaPersonas() {
           throw new Error(`Faltan columnas en el archivo: ${missing.join(", ")}`);
         }
 
+        // Género: el sistema usa V (varón) / M (mujer) / No binario. Si la planilla usa la
+        // convención vieja M/F (aparece alguna "F"), ahí "M" significa masculino -> "V".
+        const legacyMF = keyMap.genero ? usaConvencionMF(filteredRows.map((r) => r[keyMap.genero])) : false;
+
         const rows = filteredRows.map((rawRow) => {
           const nombre = formatExcelValue(rawRow[keyMap.nombre])
             ?.replace(/\s+/g, " ")
@@ -183,8 +123,10 @@ export default function CargaMasivaPersonas() {
             ?.replace(/\s+/g, " ")
             .trim();
           const dni = formatExcelValue(rawRow[keyMap.dni]);
-          const fecha_nacimiento = keyMap.fecha_nacimiento ? formatExcelDate(rawRow[keyMap.fecha_nacimiento]) : "";
-          const genero = keyMap.genero ? formatExcelValue(rawRow[keyMap.genero]) : "";
+          const fecha_nacimiento = keyMap.fecha_nacimiento ? formatExcelDate(rawRow[keyMap.fecha_nacimiento], { date1904 }) : "";
+          const genero = keyMap.genero
+            ? normalizarGenero(formatExcelValue(rawRow[keyMap.genero]), { legacyMF })
+            : "";
           const situacion_de_calle = keyMap.situacion_de_calle
             ? parseBooleanValue(rawRow[keyMap.situacion_de_calle])
             : false;
@@ -270,6 +212,9 @@ export default function CargaMasivaPersonas() {
         <p>
           Sube un archivo Excel (.xls/.xlsx) con una fila por persona. Los campos mínimos son
           Nombre, Apellido y DNI. También acepta Fecha de nacimiento, Género y Situación de calle.
+        </p>
+        <p className="text-muted">
+          Género: V (varón), M (mujer) o No binario. Si la planilla usa M/F, la M se toma como masculino.
         </p>
         <label>
           Seleccionar archivo Excel

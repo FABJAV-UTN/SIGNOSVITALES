@@ -12,7 +12,7 @@ from sqlalchemy.orm import selectinload
 from ..auth import get_current_user, require_admin
 from ..database import get_session
 from ..models import Operativo, Persona, RegistroSignosVitales
-from ..schemas import SignosBulkRequest, SignosBulkResponse, SignosBulkRow, SignosCreate, SignosRead
+from ..schemas import format_validation_errors, SignosBulkRequest, SignosBulkResponse, SignosBulkRow, SignosCreate, SignosRead
 
 router = APIRouter(prefix="/signos", tags=["signos"])
 
@@ -123,8 +123,7 @@ async def cargar_signos_bulk(
         try:
             row = SignosBulkRow.model_validate(raw_row)
         except ValidationError as exc:
-            detalles = ", ".join([error["msg"] for error in exc.errors()])
-            errores.append(f"Fila {index}: datos inválidos ({detalles})")
+            errores.append(f"Fila {index}: datos inválidos ({format_validation_errors(exc)})")
             continue
 
         try:

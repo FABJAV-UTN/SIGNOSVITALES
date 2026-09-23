@@ -1,15 +1,18 @@
-import { useCallback, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { useCallback, useEffect, useRef, useState } from "react";
 import api from "../api";
-import { useAuth } from "./AuthContext";
+import PersonaPanel from "./PersonaPanel";
+
+function Contador({ valor }) {
+  return <span className={`count-badge ${valor > 0 ? "" : "count-zero"}`}>{valor}</span>;
+}
 
 export default function BuscarPersona() {
-  const { isAdmin } = useAuth();
   const [query, setQuery] = useState("");
   const [resultados, setResultados] = useState([]);
   const [seleccionada, setSeleccionada] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const panelRef = useRef(null);
 
   const buscarPersonas = useCallback(async (valor = "") => {
     setError("");
@@ -19,7 +22,7 @@ export default function BuscarPersona() {
         params: { q: valor.trim() || undefined },
       });
       setResultados(response.data);
-    } catch (err) {
+    } catch {
       setError("No se pudo buscar la persona.");
       setResultados([]);
     } finally {
@@ -31,32 +34,14 @@ export default function BuscarPersona() {
     const timeout = setTimeout(() => {
       buscarPersonas(query);
     }, 150);
-
     return () => clearTimeout(timeout);
   }, [query, buscarPersonas]);
 
-  const [kitsPersona, setKitsPersona] = useState([]);
-  const [loadingKits, setLoadingKits] = useState(false);
-
-  async function seleccionarPersona(dni) {
-    setError("");
-    setLoading(true);
-    setKitsPersona([]);
-    setLoadingKits(true);
-    try {
-      const response = await api.get(`/personas/${dni}`);
-      setSeleccionada(response.data);
-      try {
-        const kitsRes = await api.get(`/kits/persona/${dni}`);
-        setKitsPersona(kitsRes.data);
-      } catch (kErr) {
-        setKitsPersona([]);
-      }
-    } catch (err) {
-      setError("No se encontró la persona.");
-    } finally {
-      setLoading(false);
-      setLoadingKits(false);
+  function seleccionarPersona(persona) {
+    setSeleccionada(persona);
+    // En el celular la ficha queda arriba de la tabla: la llevamos a la vista.
+    if (window.matchMedia("(max-width: 900px)").matches) {
+      requestAnimationFrame(() => panelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
     }
   }
 
@@ -66,16 +51,17 @@ export default function BuscarPersona() {
   }
 
   return (
-    <main className="page-shell">
-      <section className="card card-form">
+    <main className="page-shell page-wide">
+      <section className="card card-form search-card">
         <h1>Buscar persona</h1>
-        <form onSubmit={handleBuscar}>
+        <form onSubmit={handleBuscar} className="search-form">
           <label>
-            DNI o nombre/apellido
+            DNI, nombre o apellido
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Ej. 12345678 o Juan"
+              placeholder="Ej. 12345678, Juan o Pérez"
+              type="search"
             />
           </label>
           <button type="submit" className="button button-primary" disabled={loading}>
@@ -85,113 +71,81 @@ export default function BuscarPersona() {
         {error && <div className="alert alert-error">{error}</div>}
       </section>
 
-      <section className="card table-card">
-        <h2>Resultados</h2>
-        {loading && resultados.length === 0 ? (
-          <p className="text-muted">Cargando personas...</p>
-        ) : resultados.length === 0 ? (
-          <p className="text-muted">No se encontraron personas.</p>
-        ) : (
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>Nombre</th>
-                  <th>Apellido</th>
-                  <th>DNI</th>
-                  <th>Género</th>
-                </tr>
-              </thead>
-              <tbody>
-                {resultados.map((persona) => (
-                  <tr
-                    key={persona.id}
-                    className="persona-row"
-                    onClick={() => seleccionarPersona(persona.dni)}
-                    style={{ cursor: "pointer" }}
-                  >
-                    <td>{persona.nombre}</td>
-                    <td>{persona.apellido}</td>
-                    <td>{persona.dni}</td>
-                    <td>{persona.genero || "-"}</td>
+      <div className={`split-layout ${seleccionada ? "has-selection" : ""}`}>
+        <section className="card table-card split-main">
+          <div className="section-header">
+            <h2>Resultados</h2>
+            <span className="text-muted">{resultados.length} persona(s)</span>
+          </div>
+          {loading && resultados.length === 0 ? (
+            <p className="text-muted">Cargando personas...</p>
+          ) : resultados.length === 0 ? (
+            <p className="text-muted">No se encontraron personas.</p>
+          ) : (
+            <div className="table-scroll table-scroll-y">
+              <table>
+                <thead>
+                  <tr>
+                    <th>
+                      Nombre<span className="mobile-only"> y apellido</span>
+                    </th>
+                    <th className="desktop-only">Apellido</th>
+                    <th className="desktop-only">DNI</th>
+                    <th className="desktop-only">Género</th>
+                    <th className="num" title="Registros de signos vitales tomados">
+                      Signos
+                    </th>
+                    <th className="num" title="Kits entregados">
+                      Kits
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {seleccionada && (
-          <div className="info-card">
-            <h3>
-              {seleccionada.nombre} {seleccionada.apellido}
-            </h3>
-            <p>DNI: {seleccionada.dni}</p>
-            <p>Género: {seleccionada.genero || "No informado"}</p>
-            <p>Fecha nacimiento: {seleccionada.fecha_nacimiento || "No informado"}</p>
-            <p>Situación de calle: {seleccionada.situacion_de_calle ? "Sí" : "No"}</p>
-            <div className="button-row">
-              <Link to="/signos/registrar" state={{ dni: seleccionada.dni }} className="button button-primary">
-                Registrar signos
-              </Link>
-              <Link
-                to="/kits/entregar"
-                state={{ dni: seleccionada.dni, persona: seleccionada }}
-                className="button button-primary"
-              >
-                Entregar kit
-              </Link>
-              {isAdmin && (
-                <Link to={`/historial?q=${seleccionada.dni}`} className="button button-secondary">
-                  Ver historial
-                </Link>
-              )}
-            </div>
-
-            <div style={{ marginTop: "1.25rem", borderTop: "1px solid #e0e0e0", paddingTop: "1rem" }}>
-              <h4 style={{ margin: "0 0 0.5rem 0", color: "#222" }}>📦 Kits recibidos por esta persona</h4>
-              {loadingKits ? (
-                <p className="text-muted">Cargando historial de kits...</p>
-              ) : kitsPersona.length === 0 ? (
-                <p className="text-muted">Esta persona no registra entregas de kits previas.</p>
-              ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-                  {kitsPersona.map((k) => (
-                    <div
-                      key={k.id}
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        padding: "0.6rem 0.9rem",
-                        backgroundColor: "#ffffff",
-                        border: "1px solid #e0e0e0",
-                        borderRadius: "8px",
-                      }}
+                </thead>
+                <tbody>
+                  {resultados.map((persona) => (
+                    <tr
+                      key={persona.id}
+                      className={`persona-row ${seleccionada?.id === persona.id ? "selected" : ""}`}
+                      onClick={() => seleccionarPersona(persona)}
+                      onKeyDown={(e) => e.key === "Enter" && seleccionarPersona(persona)}
+                      tabIndex={0}
                     >
-                      <span>
-                        <strong>Fecha:</strong> {k.fecha_entrega}
-                      </span>
-                      <span
-                        style={{
-                          padding: "0.25rem 0.6rem",
-                          borderRadius: "6px",
-                          fontSize: "0.85rem",
-                          fontWeight: "bold",
-                          backgroundColor: k.tipo === "ABRIGO" ? "#e0e7ff" : "#dcfce7",
-                          color: k.tipo === "ABRIGO" ? "#3730a3" : "#166534",
-                        }}
-                      >
-                        Kit {k.tipo}
-                      </span>
-                    </div>
+                      <td>
+                        {persona.nombre}
+                        <span className="mobile-only">
+                          {" "}
+                          {persona.apellido}
+                          <span className="text-muted small block">DNI {persona.dni}</span>
+                        </span>
+                      </td>
+                      <td className="desktop-only">{persona.apellido}</td>
+                      <td className="desktop-only">{persona.dni}</td>
+                      <td className="desktop-only">{persona.genero || "-"}</td>
+                      <td className="num">
+                        <Contador valor={persona.total_signos ?? 0} />
+                      </td>
+                      <td className="num">
+                        <Contador valor={persona.total_kits ?? 0} />
+                      </td>
+                    </tr>
                   ))}
-                </div>
-              )}
+                </tbody>
+              </table>
             </div>
-          </div>
-        )}
-      </section>
+          )}
+        </section>
+
+        <aside className="split-side" ref={panelRef}>
+          {seleccionada ? (
+            <div className="card sticky-card">
+              <PersonaPanel key={seleccionada.id} persona={seleccionada} onClose={() => setSeleccionada(null)} />
+            </div>
+          ) : (
+            <div className="card sticky-card empty-panel">
+              <p className="text-muted">Seleccioná una persona de la tabla para ver su ficha.</p>
+            </div>
+          )}
+        </aside>
+      </div>
     </main>
   );
 }

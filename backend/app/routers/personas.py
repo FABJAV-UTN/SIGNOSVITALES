@@ -1,14 +1,15 @@
 import re
 import unicodedata
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import or_, select
+from pydantic import ValidationError
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from ..auth import get_current_user, require_admin
 from ..database import get_session
-from ..models import Operativo, Persona, RegistroSignosVitales
-from ..schemas import PersonaBulkRequest, PersonaBulkResponse, PersonaBulkRow, PersonaCreate, PersonaRead, SignosRead
+from ..models import Kit, Operativo, Persona, RegistroSignosVitales
+from ..schemas import format_validation_errors, PersonaBulkRequest, PersonaBulkResponse, PersonaBulkRow, PersonaCreate, PersonaListItem, PersonaRead, SignosRead
 
 router = APIRouter(prefix="/personas", tags=["personas"])
 
@@ -87,11 +88,11 @@ async def cargar_personas_bulk(
 
         try:
             row = PersonaBulkRow.model_validate(normalized_row)
+        except ValidationError as exc:
+            errores.append(f"Fila {index}: datos inválidos ({format_validation_errors(exc)})")
+            continue
         except Exception as exc:
-            detalles = ""
-            if hasattr(exc, "errors"):
-                detalles = ", ".join(error["msg"] for error in exc.errors())
-            errores.append(f"Fila {index}: datos inválidos ({detalles or str(exc)})")
+            errores.append(f"Fila {index}: datos inválidos ({exc})")
             continue
 
         dni = (row.dni or "").strip()
@@ -120,19 +121,60 @@ async def cargar_personas_bulk(
     return {"ok": ok_count, "total": len(bulk_request.rows), "errores": errores}
 
 
-@router.get("", response_model=list[PersonaRead])
-async def listar_personas(q: str | None = Query(None), db: AsyncSession = Depends(get_session)):
-    consulta = select(Persona)
-    if q and q.strip():
-        termino = q.strip()
-        filtro = f"%{termino}%"
-        dni_clean = re.sub(r"[\s.-]", "", termino)
-        consulta = consulta.where(
-            or_(Persona.dni == termino, Persona.dni == dni_clean, Persona.nombre.ilike(filtro), Persona.apellido.ilike(filtro))
-        )
-    consulta = consulta.order_by(Persona.apellido, Persona.nombre)
+@router.get("", response_model=list[PersonaListItem])
+async def listar_personas(
+    q: str | None = Query(None),
+    limit: int | None = Query(None, ge=1, le=500),
+    db: AsyncSession = Depends(get_session),
+):
+    """Lista personas con el total de signos tomados y kits entregados.
+
+    La búsqueda separa el texto en palabras: cada palabra tiene que aparecer en el
+    nombre, el apellido o el comienzo del DNI, sin importar mayúsculas ni tildes.
+    Así "juan perez", "Pérez Juan", "2776" o "juan" encuentran a la persona.
+    (Se filtra en Python porque SQLite no compara sin tildes; el padrón es chico.)
+    """
+    total_signos = (
+        select(func.count(RegistroSignosVitales.id))
+        .where(RegistroSignosVitales.persona_id == Persona.id)
+        .correlate(Persona)
+        .scalar_subquery()
+    )
+    total_kits = (
+        select(func.count(Kit.id)).where(Kit.persona_id == Persona.id).correlate(Persona).scalar_subquery()
+    )
+    consulta = select(Persona, total_signos.label("total_signos"), total_kits.label("total_kits")).order_by(
+        Persona.apellido, Persona.nombre
+    )
     resultado = await db.execute(consulta)
-    return resultado.scalars().all()
+
+    terminos = [_normalize_text(t) for t in (q or "").split() if t.strip()]
+
+    def coincide(persona: Persona) -> bool:
+        if not terminos:
+            return True
+        nombre = _normalize_text(persona.nombre)
+        apellido = _normalize_text(persona.apellido)
+        for termino in terminos:
+            dni_termino = re.sub(r"[\s.-]", "", termino)
+            if termino in nombre or termino in apellido:
+                continue
+            if dni_termino and persona.dni.startswith(dni_termino):
+                continue
+            return False
+        return True
+
+    personas = []
+    for persona, signos, kits in resultado.all():
+        if not coincide(persona):
+            continue
+        item = PersonaListItem.model_validate(persona)
+        item.total_signos = signos or 0
+        item.total_kits = kits or 0
+        personas.append(item)
+        if limit and len(personas) >= limit:
+            break
+    return personas
 
 
 @router.get("/{dni}", response_model=PersonaRead)

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import api from "../api";
+import GeneroSelector from "./GeneroSelector";
 
 export default function RegistrarPersona() {
   const navigate = useNavigate();
@@ -29,7 +30,7 @@ export default function RegistrarPersona() {
         apellido: apellido.trim(),
         dni: dni.trim(),
         fecha_nacimiento: fecha_nacimiento || null,
-        genero: genero.trim() || null,
+        genero: genero || null,
         situacion_de_calle: situacionDeCalle,
       });
       setMessage("Persona registrada con éxito.");
@@ -69,10 +70,7 @@ export default function RegistrarPersona() {
             Fecha de nacimiento
             <input type="date" value={fecha_nacimiento} onChange={(e) => setFechaNacimiento(e.target.value)} />
           </label>
-          <label>
-            Género
-            <input value={genero} onChange={(e) => setGenero(e.target.value)} placeholder="Masculino / Femenino" />
-          </label>
+          <GeneroSelector value={genero} onChange={setGenero} />
           <label className="checkbox-label">
             <input type="checkbox" checked={situacionDeCalle} onChange={(e) => setSituacionDeCalle(e.target.checked)} />
             Persona en situación de calle

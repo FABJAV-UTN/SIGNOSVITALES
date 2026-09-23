@@ -1,5 +1,5 @@
 import asyncio
-from datetime import time
+from datetime import date, time
 
 from sqlalchemy import delete, select
 
@@ -108,5 +108,114 @@ def test_bulk_signos_matches_case_insensitive_and_reports_missing_personas():
 
             assert result["ok"] == 1
             assert any("persona no encontrada" in error.lower() for error in result["errores"])
+
+    asyncio.run(_run())
+
+
+def test_bulk_signos_acepta_fechas_formato_eeuu_y_argentino():
+    """Fechas como las que devuelve un Excel con formato mm-dd-yy (ej. '8/27/26')."""
+    async def _run():
+        await reset_db()
+        async with AsyncSessionLocal() as session:
+            session.add(Operativo(lugar="Museo Ferroviario", dia_semana="Jueves", hora=time(20, 30), activo=True))
+            session.add(Persona(nombre="Juan", apellido="Pérez", dni="12345678"))
+            await session.commit()
+
+            result = await cargar_signos_bulk(
+                SignosBulkRequest(
+                    rows=[
+                        {"identificador": "12345678", "signos": "120/80-75-98", "fecha": "8/27/26"},
+                        {"identificador": "12345678", "signos": "120/80-75-97", "fecha": "27/08/2026"},
+                        {"identificador": "12345678", "signos": "120/80-75-96", "fecha": 46261},
+                    ]
+                ),
+                user={"username": "voluntario", "role": "voluntario"},
+                db=session,
+            )
+
+            assert result["ok"] == 3, result["errores"]
+            fechas = {r.fecha for r in (await session.execute(select(RegistroSignosVitales))).scalars().all()}
+            assert fechas == {date(2026, 8, 27)}
+
+    asyncio.run(_run())
+
+
+def test_bulk_signos_fecha_invalida_solo_descarta_esa_fila():
+    """Una fecha inválida no debe tirar abajo todo el archivo (antes: 422 para todo el request)."""
+    async def _run():
+        await reset_db()
+        async with AsyncSessionLocal() as session:
+            session.add(Operativo(lugar="Museo Ferroviario", dia_semana="Jueves", hora=time(20, 30), activo=True))
+            session.add(Persona(nombre="Juan", apellido="Pérez", dni="12345678"))
+            await session.commit()
+
+            # Construir el request NO debe lanzar ValidationError.
+            request = SignosBulkRequest(
+                rows=[
+                    {"identificador": "12345678", "signos": "120/80-75-98", "fecha": "2026-27-08"},
+                    {"identificador": "12345678", "signos": "120/80-75-98", "fecha": "2026-08-27"},
+                ]
+            )
+            result = await cargar_signos_bulk(request, user={"username": "voluntario", "role": "voluntario"}, db=session)
+
+            assert result["ok"] == 1
+            assert len(result["errores"]) == 1
+            assert "Fila 1" in result["errores"][0]
+            assert "fecha inválida" in result["errores"][0]
+
+    asyncio.run(_run())
+
+
+def test_bulk_signos_endpoint_http_no_devuelve_422_por_una_fecha():
+    from fastapi.testclient import TestClient
+
+    from app.auth import get_current_user
+    from app.main import app
+
+    async def _seed():
+        await reset_db()
+        async with AsyncSessionLocal() as session:
+            session.add(Operativo(lugar="Museo Ferroviario", dia_semana="Jueves", hora=time(20, 30), activo=True))
+            session.add(Persona(nombre="Juan", apellido="Pérez", dni="12345678"))
+            await session.commit()
+
+    asyncio.run(_seed())
+    app.dependency_overrides[get_current_user] = lambda: {"username": "voluntario", "role": "voluntario"}
+    try:
+        with TestClient(app) as client:
+            response = client.post(
+                "/api/signos/bulk",
+                json={
+                    "rows": [
+                        {"identificador": "12345678", "signos": "120/80-75-98", "fecha": "2026-27-08"},
+                        {"identificador": "12345678", "signos": "120/80-75-98", "fecha": "2026-08-27"},
+                    ]
+                },
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 201, response.text
+    assert response.json()["ok"] == 1
+
+
+def test_personas_bulk_fecha_nacimiento_invalida_solo_descarta_esa_fila():
+    async def _run():
+        await reset_db()
+        async with AsyncSessionLocal() as session:
+            result = await cargar_personas_bulk(
+                PersonaBulkRequest(
+                    rows=[
+                        {"nombre": "Juan", "apellido": "Pérez", "dni": "12345678", "fecha_nacimiento": "1990-13-40"},
+                        {"nombre": "Ana", "apellido": "García", "dni": "87654321", "fecha_nacimiento": "5/14/90"},
+                    ]
+                ),
+                db=session,
+            )
+
+            assert result["ok"] == 1
+            assert any("fecha inválida" in e for e in result["errores"])
+            ana = (await session.execute(select(Persona).where(Persona.dni == "87654321"))).scalar_one()
+            assert ana.fecha_nacimiento == date(1990, 5, 14)
 
     asyncio.run(_run())
