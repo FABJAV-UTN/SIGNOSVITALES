@@ -228,9 +228,11 @@ DELETE FROM kits;
 DELETE FROM registro_signos_vitales;
 DELETE FROM personas;
 COMMIT;
-VACUUM;   -- libera el espacio del archivo
+VACUUM;
 .quit
 ```
+
+`VACUUM` libera el espacio del archivo. Escribí los comandos tal cual, sin comentarios (`-- ...`) al final de la línea: la consola de `sqlite3` los toma como el comienzo de otra instrucción, queda esperando un `;` (el prompt cambia a `...>`) y ya no reconoce `.quit`. Si te pasa, escribí `;` y Enter (va a mostrar un error, no pasa nada) y después `.quit`, o salí con **Ctrl+D**.
 
 ```bash
 docker compose start backend
