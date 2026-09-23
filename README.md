@@ -47,7 +47,7 @@ Navegador (voluntarios)
                                                   backend/data/signos_vitales.db (SQLite)
 ```
 
-El sistema está pensado para correr **sin servidor ni Internet**: una notebook levanta los contenedores y comparte una red Wi-Fi local (hotspot). Los demás voluntarios entran desde el navegador del celular a `http://<ip-de-la-notebook>`.
+El sistema está pensado para correr **sin servidor**: una notebook levanta los contenedores y los demás voluntarios, conectados a la misma red wifi (por ejemplo, el hotspot de un teléfono), entran desde el navegador del celular a `http://<ip-de-la-notebook>`.
 
 ## Estructura del proyecto
 
@@ -89,7 +89,7 @@ cp .env.example .env      # y editá .env: poné las contraseñas de admin y vol
 docker compose up -d --build
 ```
 
-- Aplicación: `http://localhost` (o `http://<ip-de-la-notebook>` desde otro dispositivo de la misma red; ver [Acceso con un nombre](#acceso-con-un-nombre-en-lugar-de-la-ip)).
+- Aplicación: `http://localhost` (o `http://<ip-de-la-notebook>` desde otro dispositivo de la misma red; ver [Cómo entrar desde los celulares](#cómo-entrar-desde-los-celulares-y-otras-computadoras)).
 - El backend **no** se publica fuera de Docker: solo se llega a él a través de Nginx, en `/api/`. La documentación interactiva de la API (`/docs`) está disponible cuando se corre el backend en modo desarrollo (ver más abajo).
 
 La primera vez se crea sola la base vacía en `backend/data/signos_vitales.db`, con el operativo por defecto (Museo Ferroviario, jueves 20:30).
@@ -128,21 +128,62 @@ Para cambiar una contraseña: editá `.env` y ejecutá `docker compose up -d` (s
 
 Todas las rutas de la API, salvo el login y la consulta del operativo activo, exigen haber iniciado sesión.
 
-## Acceso con un nombre en lugar de la IP
+## Cómo entrar desde los celulares y otras computadoras
 
-En el operativo, la notebook comparte un hotspot y los celulares se conectan a esa red. Hay tres maneras de que no haga falta tipear la IP; se pueden combinar.
+La notebook (o PC) que corre el sistema y los demás dispositivos tienen que estar conectados a **la misma red wifi**; por ejemplo, el hotspot de un teléfono. Desde los otros dispositivos se entra escribiendo en el navegador la IP de la notebook:
 
-**1. Código QR (lo más simple).** Si el hotspot se crea con NetworkManager (la opción "Punto de acceso Wi-Fi" de Ubuntu), la notebook siempre queda con la IP `10.42.0.1`. Un QR impreso con `http://10.42.0.1` en la mesa del operativo alcanza: se escanea con la cámara y abre el sistema.
-
-**2. Un nombre propio en el hotspot, por ejemplo `http://sisvap.lan`.** El hotspot de NetworkManager usa `dnsmasq` para dar las direcciones a los celulares; se le puede agregar un nombre. Una sola vez, en la notebook:
-
-```bash
-echo "address=/sisvap.lan/10.42.0.1" | sudo tee /etc/NetworkManager/dnsmasq-shared.d/sisvap.conf
+```
+http://<ip-de-la-notebook>
 ```
 
-Después apagá y volvé a encender el hotspot. Cualquier celular conectado a esa red abre el sistema en `http://sisvap.lan`. Usá una terminación como `.lan`, no `.com`: un `.com` puede existir en Internet, y algunos navegadores fuerzan HTTPS en ciertos dominios. Si un teléfono tiene configurado un "DNS privado" fijo (Android → Ajustes → Red → DNS privado), puede ignorar el nombre: en ese caso, dejarlo en "Automático" o usar el QR.
+Por ejemplo, `http://192.168.43.25`. Solo `http://` y la IP: no hace falta poner el puerto.
 
-**3. `http://<nombre-de-la-notebook>.local`.** Ubuntu anuncia su nombre en la red (Avahi/mDNS). Funciona bien en iPhone y en computadoras; en Android depende de la versión, así que no conviene depender solo de esto.
+> La IP la asigna la red (el teléfono que comparte internet o el router), así que **puede cambiar** de un operativo a otro, o cada vez que se reactiva el hotspot. Conviene buscarla cada vez que se levanta el sistema.
+
+### Buscar la IP de la notebook
+
+**Debian, Ubuntu, Linux Mint y otras distribuciones Linux**
+
+```bash
+ip route get 1.1.1.1 | grep -oP 'src \K\S+'
+```
+
+Muestra solo la IP que la notebook usa en la red actual. Otras formas:
+
+```bash
+hostname -I          # lista todas las IP de la máquina
+ip -4 -brief addr    # IP por interfaz: la del wifi suele llamarse wlan0 o wlp...
+```
+
+`hostname -I` también muestra las redes internas de Docker (direcciones que empiezan con `172.17.`, `172.18.`, etc.): **esas no sirven**. La correcta es la de la interfaz del wifi (o de la red cableada, si la notebook está conectada por cable). Estos comandos son iguales en Debian, Ubuntu y derivadas; no hace falta instalar nada.
+
+**Windows**
+
+En una terminal (cmd o PowerShell):
+
+```
+ipconfig
+```
+
+Buscá el bloque **"Adaptador de LAN inalámbrica Wi-Fi"** (o **"Adaptador de Ethernet"** si está por cable) y la línea **"Dirección IPv4"**. Ignorá los adaptadores que digan `vEthernet (WSL)` o `vEthernet (Default Switch)`: son redes internas de Docker/WSL.
+
+En PowerShell, directamente la IP del wifi:
+
+```powershell
+(Get-NetIPAddress -AddressFamily IPv4 -InterfaceAlias "Wi-Fi").IPAddress
+```
+
+**macOS**
+
+```bash
+ipconfig getifaddr en0
+```
+
+### Si no carga desde el celular
+
+- Verificá que el celular esté en **la misma red** que la notebook (no en datos móviles).
+- Probá primero en la propia notebook: `http://localhost` tiene que abrir el sistema.
+- Si en la notebook anda pero en el celular no, puede ser el firewall. En Debian y Ubuntu no suele haber uno activo; si usás `ufw`, habilitá el puerto 80 con `sudo ufw allow 80/tcp`. En Windows, cuando Docker Desktop pregunte, permití el acceso en **redes privadas** y marcá la red wifi como privada.
 
 ## Cargas masivas desde Excel
 
