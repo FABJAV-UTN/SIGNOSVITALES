@@ -525,6 +525,11 @@ export default function RevisionCarga({ data, preview, endpoint, onCancelar, onT
         {faltanDatos.length > 0 && (
           <div className="alert alert-warning">Completá el nombre de: {faltanDatos.map((r) => r.identificador).join(", ")}.</div>
         )}
+        {!hayAlgoParaHacer && pendientes.length === 0 && faltanDatos.length === 0 && (
+          <div className="alert alert-warning">
+            No hay nada para cargar: todas las filas quedaron omitidas o sin persona para crear.
+          </div>
+        )}
         {error && <div className="alert alert-error">{error}</div>}
         <div className="button-row">
           <button

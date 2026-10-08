@@ -95,8 +95,14 @@ select {
   color: white;
 }
 
-.button-primary:hover {
+.button-primary:hover:not(:disabled) {
   background: var(--primary-dark);
+}
+
+/* Botones deshabilitados: que se note que no se pueden tocar. */
+.button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .button-secondary {
