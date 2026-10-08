@@ -11,6 +11,7 @@ from .models import Operativo
 from .routers.kits import router as kits_router
 from .routers.operativos import router as operativos_router
 from .routers.personas import router as personas_router
+from .routers.reportes import router as reportes_router
 from .routers.signos import router as signos_router
 
 app = FastAPI(title="Registro Signos Vitales API")
@@ -28,6 +29,7 @@ app.include_router(personas_router, prefix="/api")
 app.include_router(signos_router, prefix="/api")
 app.include_router(kits_router, prefix="/api")
 app.include_router(operativos_router, prefix="/api")
+app.include_router(reportes_router, prefix="/api")
 
 
 async def ensure_operativo() -> None:

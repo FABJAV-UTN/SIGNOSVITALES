@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { useAuth } from "./AuthContext";
 import { AvisoCumpleanos } from "./Cumpleanos";
+import ExportarPdfButton from "./ExportarPdfButton";
 
 export default function Dashboard() {
   const { isAdmin } = useAuth();
@@ -41,6 +42,11 @@ export default function Dashboard() {
             </Link>
           )}
         </div>
+        {isAdmin && (
+          <div className="button-row">
+            <ExportarPdfButton />
+          </div>
+        )}
       </section>
     </main>
   );

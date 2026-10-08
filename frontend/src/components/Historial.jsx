@@ -4,6 +4,7 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContai
 import api from "../api";
 import PersonaAutocomplete from "./PersonaAutocomplete";
 import PersonaPanel from "./PersonaPanel";
+import ExportarPdfButton from "./ExportarPdfButton";
 
 function SignosChart({ registros }) {
   const datos = useMemo(
@@ -190,7 +191,10 @@ export default function Historial() {
   return (
     <main className="page-shell page-wide">
       <section className="card card-form search-card">
-        <h1>Historial de signos</h1>
+        <div className="section-header">
+          <h1>Historial de signos</h1>
+          <ExportarPdfButton className="button button-outline button-small" />
+        </div>
         <label>
           Buscar persona
           <PersonaAutocomplete onSelect={seleccionar} placeholder="Escribí DNI, nombre o apellido..." />
