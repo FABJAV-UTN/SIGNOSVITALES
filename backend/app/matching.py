@@ -99,3 +99,57 @@ def coincide_exacto(nombre: str | None, apellido: str | None, persona: Persona) 
     if not nombre or not apellido:
         return False
     return normalizar(persona.nombre) == normalizar(nombre) and normalizar(persona.apellido) == normalizar(apellido)
+
+
+_SIN_APELLIDO = re.compile(r"^(sin ?apellido\d*|sinapellido\d*)$")
+
+
+def _apellido_real(apellido: str | None) -> str:
+    """Apellido normalizado; los de relleno ("Sin apellido", "SinApellido3") cuentan como vacío."""
+    texto = normalizar(apellido)
+    return "" if _SIN_APELLIDO.match(texto) else texto
+
+
+def _parecido_nombre(a: str, b: str) -> float:
+    """Dos nombres de pila (o palabras sueltas): iguales, uno abreviatura del otro
+    ("Ema" / "Emanuel", "Manu" / "Manuel", "Magda" / "Magdalena") o escritos parecido."""
+    if not a or not b:
+        return 0.0
+    if a == b:
+        return 1.0
+    corto, largo = sorted((a, b), key=len)
+    if len(corto) >= 3 and largo.startswith(corto):
+        return 0.85
+    return _ratio(a, b)
+
+
+def similitud_personas(a: Persona, b: Persona) -> float:
+    """Qué tan probable es que dos registros sean la misma persona escrita distinto (0..1).
+    Dos DNI distintos cargados = personas distintas."""
+    if a.dni and b.dni and a.dni != b.dni:
+        return 0.0
+    nombre_a, nombre_b = normalizar(a.nombre), normalizar(b.nombre)
+    apellido_a, apellido_b = _apellido_real(a.apellido), _apellido_real(b.apellido)
+
+    if apellido_a and apellido_b:
+        mejor_apellido = _ratio(apellido_a, apellido_b)
+        if mejor_apellido >= 0.75:
+            pila_a, pila_b = nombre_a.split(), nombre_b.split()
+            pila = max(
+                _parecido_nombre(nombre_a, nombre_b),
+                _parecido_nombre(pila_a[0] if pila_a else "", pila_b[0] if pila_b else ""),
+            )
+            return round(min(pila, mejor_apellido), 3)
+        # Escrito al revés: "Muñoz Yesica" / "Yesica Muñoz".
+        cruzado = min(_ratio(nombre_a, apellido_b), _ratio(apellido_a, nombre_b))
+        return round(cruzado, 3) if cruzado >= 0.85 else 0.0
+
+    # Al menos uno sin apellido ("Zulma", "Pesano", "Ema"): se compara cada palabra.
+    palabras_a = (nombre_a + " " + apellido_a).split()
+    palabras_b = (nombre_b + " " + apellido_b).split()
+    if not palabras_a or not palabras_b:
+        return 0.0
+    corto, largo = sorted((palabras_a, palabras_b), key=len)
+    # Cada palabra del más corto tiene que parecerse a alguna del otro.
+    puntajes = [max(_parecido_nombre(p, q) for q in largo) for p in corto]
+    return round(min(puntajes), 3)

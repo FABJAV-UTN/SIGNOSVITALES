@@ -55,3 +55,11 @@ class Kit(Base):
     fecha_entrega = Column(Date, nullable=False, default=date.today)
 
     persona = relationship("Persona", back_populates="kits")
+
+class PersonasDistintas(Base):
+    """Pares de personas que alguien marcó como "no son la misma persona" en la pantalla de
+    repetidas, para no volver a proponerlas juntas. Se guarda siempre con persona_a_id < persona_b_id."""
+    __tablename__ = "personas_distintas"
+
+    persona_a_id = Column(Integer, ForeignKey("personas.id", ondelete="CASCADE"), primary_key=True)
+    persona_b_id = Column(Integer, ForeignKey("personas.id", ondelete="CASCADE"), primary_key=True)

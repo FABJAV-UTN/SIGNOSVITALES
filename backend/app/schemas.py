@@ -584,3 +584,34 @@ class KitBulkRequest(BaseModel):
 class KitBulkResponse(BaseModel):
     ok: int
     errores: list[str]
+
+
+# ---------- Personas repetidas ----------
+
+class PersonaRepetida(PersonaListItem):
+    # Con quién se parece dentro del grupo y cuánto (para mostrar el motivo).
+    parecida_a: list[int] = []
+    similitud_max: float = 0.0
+
+
+class GrupoRepetidos(BaseModel):
+    personas: list[PersonaRepetida]
+    # Registro sugerido para conservar: el que tiene DNI o más atenciones.
+    sugerida_id: int
+
+
+class UnificarRequest(BaseModel):
+    conservar_id: int
+    unir_ids: list[int] = Field(min_length=1)
+
+
+class UnificarResponse(BaseModel):
+    persona: PersonaListItem
+    signos_movidos: int
+    kits_movidos: int
+    duplicados_descartados: int
+
+
+class DistintasRequest(BaseModel):
+    # Parejas de ids que NO son la misma persona (no se vuelven a proponer juntas).
+    pares: list[tuple[int, int]] = Field(min_length=1)

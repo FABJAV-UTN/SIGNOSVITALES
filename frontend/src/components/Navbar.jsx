@@ -75,6 +75,15 @@ export default function Navbar() {
             Historial
           </NavLink>
         )}
+        {isAdmin && (
+          <NavLink
+            to="/personas/repetidas"
+            className={({ isActive }) => (isActive ? "nav-link active" : "nav-link")}
+            onClick={() => setOpen(false)}
+          >
+            Repetidas
+          </NavLink>
+        )}
         {token ? (
           <button className="button button-secondary" onClick={logout}>
             Cerrar sesión

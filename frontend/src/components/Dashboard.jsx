@@ -41,6 +41,11 @@ export default function Dashboard() {
               Historial administrativo
             </Link>
           )}
+          {isAdmin && (
+            <Link to="/personas/repetidas" className="card-action">
+              Personas repetidas
+            </Link>
+          )}
         </div>
         {isAdmin && (
           <div className="button-row">

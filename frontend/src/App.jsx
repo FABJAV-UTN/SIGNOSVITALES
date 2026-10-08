@@ -14,6 +14,8 @@ import CargaMasivaSignos from "./components/CargaMasivaSignos";
 import CargaMasivaPersonas from "./components/CargaMasivaPersonas";
 import CargaMasivaKits from "./components/CargaMasivaKits";
 import Cumpleanos from "./components/Cumpleanos";
+import PersonasRepetidas from "./components/PersonasRepetidas";
+import ExportarPdf from "./components/ExportarPdf";
 import "./App.css";
 
 function ProtectedRoute({ children }) {
@@ -128,6 +130,26 @@ function AppRoutes() {
             <ProtectedRoute>
               <AdminRoute>
                 <Historial />
+              </AdminRoute>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/personas/repetidas"
+          element={
+            <ProtectedRoute>
+              <AdminRoute>
+                <PersonasRepetidas />
+              </AdminRoute>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/reportes/pdf"
+          element={
+            <ProtectedRoute>
+              <AdminRoute>
+                <ExportarPdf />
               </AdminRoute>
             </ProtectedRoute>
           }

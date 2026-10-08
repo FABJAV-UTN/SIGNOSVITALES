@@ -205,6 +205,7 @@ Antes de guardar, las tres cargas muestran la misma **revisión**:
 
 - **Fechas:** celda con formato de fecha, `AAAA-MM-DD` o `DD/MM/AAAA`.
 - **Género:** `V` (varón), `M` (mujer) o `No binario`. Si la planilla usa la convención vieja M/F, la M se toma como masculino.
+- **Personas repetidas** (solo admin): la pantalla "Repetidas" agrupa los registros que por el nombre podrían ser la misma persona ("Ema" / "Emanuel", "Manu" / "Manuel", "Marelo" / "Marcelo Tercero"). En cada grupo se destilda a quien sea otra persona, se elige qué registro conservar y se unifica: los signos y kits pasan a ese registro, se completan los datos que le falten (DNI, nacimiento, género) y se descartan las mediciones idénticas repetidas. Registros con DNI distintos no se pueden unificar. "No son la misma persona" hace que el grupo no vuelva a aparecer.
 - **Personas sin DNI:** quedan con el DNI vacío y se completa después (desde "Editar datos" en la ficha o con otra planilla que lo traiga). Los DNI provisorios 90xxxxxx que usaba antes el sistema se vaciaron automáticamente.
 
 ## Base de datos

@@ -1,6 +1,9 @@
-from fastapi import APIRouter, Depends
+from datetime import date
+
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import Response
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -16,10 +19,21 @@ router = APIRouter(prefix="/reportes", tags=["reportes"])
 NOMBRE_PDF = "SISVAP_signos_vitales.pdf"
 
 
-@router.get("/signos-vitales.pdf", dependencies=[Depends(require_admin)])
-async def exportar_pdf_signos(db: AsyncSession = Depends(get_session)):
+class PedidoPdf(BaseModel):
+    persona_ids: list[int] = Field(min_length=1)
+    desde: date
+    hasta: date
+
+
+@router.post("/signos-vitales.pdf", dependencies=[Depends(require_admin)])
+async def exportar_pdf_signos(pedido: PedidoPdf, db: AsyncSession = Depends(get_session)):
+    """PDF con una hoja apaisada por persona elegida, con los signos y kits del período."""
+    if pedido.desde > pedido.hasta:
+        raise HTTPException(status_code=400, detail="La fecha 'desde' es posterior a 'hasta'.")
     resultado = await db.execute(
-        select(Persona).options(selectinload(Persona.registros), selectinload(Persona.kits))
+        select(Persona)
+        .where(Persona.id.in_(pedido.persona_ids))
+        .options(selectinload(Persona.registros), selectinload(Persona.kits))
     )
     personas = [
         PersonaPDF(
@@ -34,7 +48,7 @@ async def exportar_pdf_signos(db: AsyncSession = Depends(get_session)):
         )
         for p in resultado.scalars().all()
     ]
-    pdf = await run_in_threadpool(generar_pdf, personas)
+    pdf = await run_in_threadpool(generar_pdf, personas, pedido.desde, pedido.hasta)
     return Response(
         content=pdf,
         media_type="application/pdf",

@@ -1,17 +1,18 @@
-"""Genera el PDF de signos vitales de todas las personas.
+"""Genera el PDF de signos vitales de las personas elegidas, para un rango de fechas.
 
-Por persona: apellido, nombre, edad, resumen de kits entregados y tres gráficos
-(presión arterial, frecuencia cardíaca y SpO2) a lo largo del tiempo.
+Una hoja A4 apaisada por persona: apellido, nombre, edad, kits entregados en el período
+y tres gráficos grandes (presión arterial, frecuencia cardíaca y SpO2) con la fecha exacta
+de cada control en el eje y el valor anotado en cada punto.
 
-Es código sincrónico (matplotlib + reportlab): el router lo llama en un thread
-aparte para no frenar el servidor. Se usa la API orientada a objetos de
-matplotlib (Figure + FigureCanvasAgg) y no pyplot, que no es segura entre threads.
+Es código sincrónico (matplotlib + reportlab): el router lo llama en un thread aparte para
+no frenar el servidor. Se usa la API orientada a objetos de matplotlib (Figure +
+FigureCanvasAgg) y no pyplot, que no es segura entre threads.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from io import BytesIO
 
 import matplotlib
@@ -19,26 +20,21 @@ import matplotlib
 matplotlib.use("Agg")
 
 from matplotlib.backends.backend_agg import FigureCanvasAgg  # noqa: E402
-from matplotlib.dates import AutoDateLocator, DateFormatter  # noqa: E402
+from matplotlib.dates import DateFormatter, date2num  # noqa: E402
 from matplotlib.figure import Figure  # noqa: E402
+from matplotlib.ticker import MaxNLocator  # noqa: E402
 from reportlab.lib import colors  # noqa: E402
-from reportlab.lib.pagesizes import A4  # noqa: E402
+from reportlab.lib.pagesizes import A4, landscape  # noqa: E402
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet  # noqa: E402
 from reportlab.lib.units import cm  # noqa: E402
-from reportlab.platypus import (  # noqa: E402
-    HRFlowable,
-    Image,
-    KeepTogether,
-    Paragraph,
-    SimpleDocTemplate,
-    Spacer,
-)
+from reportlab.platypus import Image, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle  # noqa: E402
 
 ROJO = "#e3000f"
 CELESTE = "#17a2b8"
 NARANJA = "#f5a623"
-AMARILLO = "#d4a017"
+AMARILLO = "#c9940a"
 GRIS = "#555555"
+PAGINA = landscape(A4)
 
 
 @dataclass
@@ -88,6 +84,7 @@ def _fmt_fecha(d: date) -> str:
 
 
 def resumen_kits(kits: list[KitPDF]) -> str:
+    """'PPAAS × 2 (03/09/2026, 17/09/2026) · ABRIGO × 1 (10/09/2026)' o 'ninguno'."""
     if not kits:
         return "ninguno"
     por_tipo: dict[str, list[date]] = {}
@@ -95,8 +92,8 @@ def resumen_kits(kits: list[KitPDF]) -> str:
         por_tipo.setdefault(kit.tipo, []).append(kit.fecha_entrega)
     partes = []
     for tipo in sorted(por_tipo):
-        fechas = por_tipo[tipo]
-        partes.append(f"{tipo} × {len(fechas)} (último {_fmt_fecha(max(fechas))})")
+        fechas = sorted(por_tipo[tipo])
+        partes.append(f"{tipo} × {len(fechas)} ({', '.join(_fmt_fecha(f) for f in fechas)})")
     return " · ".join(partes)
 
 
@@ -105,7 +102,7 @@ def _serie(fechas: list[date], valores: list) -> tuple[list[date], list]:
     return [p[0] for p in pares], [p[1] for p in pares]
 
 
-def _grafico_persona(registros: list[RegistroPDF]) -> BytesIO:
+def _grafico_persona(registros: list[RegistroPDF], desde: date, hasta: date, ancho_cm: float, alto_cm: float) -> BytesIO:
     registros = sorted(registros, key=lambda r: r.fecha)
     fechas = [r.fecha for r in registros]
     pa = [_parsear_pa(r.presion_arterial) for r in registros]
@@ -114,117 +111,133 @@ def _grafico_persona(registros: list[RegistroPDF]) -> BytesIO:
     fc = [r.frecuencia_cardiaca or None for r in registros]
     spo2 = [r.oxigenacion_sangre or None for r in registros]
 
-    fig = Figure(figsize=(7.2, 1.95), dpi=150)
+    fig = Figure(figsize=(ancho_cm / 2.54, alto_cm / 2.54), dpi=150)
     FigureCanvasAgg(fig)
-    axes = fig.subplots(1, 3)
+    axes = fig.subplots(3, 1, sharex=True)
 
     paneles = [
-        ("Presión arterial (mmHg)", [("Sistólica", sistolica, NARANJA, "-"), ("Diastólica", diastolica, AMARILLO, "--")]),
-        ("Frec. cardíaca (lpm)", [("FC", fc, ROJO, "-")]),
-        ("SpO2 (%)", [("SpO2", spo2, CELESTE, "-")]),
+        ("Presión arterial (mmHg)", [("Sistólica", sistolica, NARANJA, "-", 7), ("Diastólica", diastolica, AMARILLO, "--", -11)]),
+        ("Frecuencia cardíaca (lpm)", [("FC", fc, ROJO, "-", 7)]),
+        ("SpO2 (%)", [("SpO2", spo2, CELESTE, "-", 7)]),
     ]
+    fechas_con_dato = sorted({f for f, *vals in zip(fechas, sistolica, diastolica, fc, spo2) if any(v for v in vals)})
     for ax, (titulo, series) in zip(axes, paneles):
         hay_datos = False
-        for etiqueta, valores, color, estilo in series:
+        for etiqueta, valores, color, estilo, desplazamiento in series:
             xs, ys = _serie(fechas, valores)
-            if xs:
-                hay_datos = True
-                ax.plot(xs, ys, estilo, color=color, linewidth=1.4, marker="o", markersize=3, label=etiqueta)
-                for x, y in ((xs[-1], ys[-1]),):
-                    ax.annotate(f"{y:g}", (x, y), textcoords="offset points", xytext=(0, 4),
-                                ha="center", fontsize=6, color=color)
-        ax.set_title(titulo, fontsize=7.5, color="#222222", pad=3)
-        ax.tick_params(labelsize=6, length=2, colors=GRIS)
-        ax.grid(True, color="#e5e5e5", linewidth=0.5)
+            if not xs:
+                continue
+            hay_datos = True
+            ax.plot(xs, ys, estilo, color=color, linewidth=1.6, marker="o", markersize=4, label=etiqueta)
+            for x, y in zip(xs, ys):
+                ax.annotate(f"{y:g}", (x, y), textcoords="offset points", xytext=(0, desplazamiento),
+                            ha="center", fontsize=7, color=color)
+        ax.set_title(titulo, fontsize=9, color="#222222", loc="left", pad=4)
+        ax.tick_params(labelsize=7.5, length=3, colors=GRIS)
+        ax.grid(True, color="#e5e5e5", linewidth=0.6)
         for lado in ("top", "right"):
             ax.spines[lado].set_visible(False)
         for lado in ("left", "bottom"):
             ax.spines[lado].set_color("#bbbbbb")
         if hay_datos:
-            ax.xaxis.set_major_locator(AutoDateLocator(minticks=2, maxticks=4))
-            ax.xaxis.set_major_formatter(DateFormatter("%d/%m/%y"))
-            ax.margins(x=0.08, y=0.25)
+            ax.margins(y=0.3)
+            ax.yaxis.set_major_locator(MaxNLocator(nbins=6, integer=True))
             if len(series) > 1:
-                ax.legend(fontsize=5.5, frameon=False, loc="best", handlelength=1.6)
+                ax.legend(fontsize=7, frameon=False, loc="upper left", bbox_to_anchor=(1.0, 1.0), handlelength=1.8)
         else:
-            ax.set_xticks([])
             ax.set_yticks([])
-            ax.text(0.5, 0.5, "sin datos", ha="center", va="center", fontsize=7, color="#999999",
+            ax.text(0.5, 0.5, "sin datos en el período", ha="center", va="center", fontsize=8, color="#999999",
                     transform=ax.transAxes)
 
-    fig.tight_layout(pad=0.4, w_pad=1.2)
+    # Eje de fechas: el período elegido, con una marca en cada día que hubo control.
+    ax = axes[-1]
+    ax.set_xlim(date2num(desde - timedelta(days=1)), date2num(hasta + timedelta(days=1)))
+    ax.set_xticks([date2num(f) for f in fechas_con_dato])
+    ax.xaxis.set_major_formatter(DateFormatter("%d/%m/%y"))
+    if len(fechas_con_dato) > 8:
+        for etiqueta in ax.get_xticklabels():
+            etiqueta.set_rotation(45)
+            etiqueta.set_horizontalalignment("right")
+
+    fig.tight_layout(pad=0.5, h_pad=0.8)
     buffer = BytesIO()
     fig.savefig(buffer, format="png")
     buffer.seek(0)
     return buffer
 
 
-def generar_pdf(personas: list[PersonaPDF], ahora: datetime | None = None) -> bytes:
+def generar_pdf(personas: list[PersonaPDF], desde: date, hasta: date, ahora: datetime | None = None) -> bytes:
+    """Una página apaisada por persona. Solo se usan los registros y kits dentro de [desde, hasta]."""
     ahora = ahora or datetime.now()
     hoy = ahora.date()
+    periodo = f"{_fmt_fecha(desde)} al {_fmt_fecha(hasta)}"
 
     estilos = getSampleStyleSheet()
-    titulo = ParagraphStyle("titulo", parent=estilos["Title"], fontSize=15, spaceAfter=2, textColor=colors.HexColor(ROJO))
-    subtitulo = ParagraphStyle("sub", parent=estilos["Normal"], fontSize=8.5, textColor=colors.HexColor(GRIS),
-                               alignment=1, spaceAfter=6)
-    nombre_st = ParagraphStyle("nombre", parent=estilos["Normal"], fontName="Helvetica-Bold", fontSize=10.5, leading=13)
-    detalle_st = ParagraphStyle("detalle", parent=estilos["Normal"], fontSize=8.5, leading=11,
+    nombre_st = ParagraphStyle("nombre", parent=estilos["Normal"], fontName="Helvetica-Bold", fontSize=16, leading=19)
+    periodo_st = ParagraphStyle("periodo", parent=estilos["Normal"], fontSize=10, leading=12, alignment=2,
+                                textColor=colors.HexColor(GRIS))
+    detalle_st = ParagraphStyle("detalle", parent=estilos["Normal"], fontSize=10, leading=13,
                                 textColor=colors.HexColor("#333333"))
-    vacio_st = ParagraphStyle("vacio", parent=detalle_st, textColor=colors.HexColor("#999999"), fontName="Helvetica-Oblique")
+    vacio_st = ParagraphStyle("vacio", parent=detalle_st, fontSize=12, textColor=colors.HexColor("#999999"),
+                              fontName="Helvetica-Oblique")
 
     buffer = BytesIO()
+    margen = 1.2 * cm
     doc = SimpleDocTemplate(
-        buffer,
-        pagesize=A4,
-        leftMargin=1.5 * cm,
-        rightMargin=1.5 * cm,
-        topMargin=1.4 * cm,
-        bottomMargin=1.4 * cm,
-        title="SISVAP - Signos vitales",
-        author="Cruz Roja San Rafael",
+        buffer, pagesize=PAGINA, leftMargin=margen, rightMargin=margen, topMargin=1.0 * cm, bottomMargin=1.2 * cm,
+        title="SISVAP - Signos vitales", author="Cruz Roja San Rafael",
     )
     ancho = doc.width
 
-    historia = [
-        Paragraph("Signos vitales — Cruz Roja San Rafael", titulo),
-        Paragraph(
-            f"Generado el {ahora.strftime('%d/%m/%Y %H:%M')} · {len(personas)} persona(s) · "
-            "Documento confidencial",
-            subtitulo,
-        ),
-        HRFlowable(width="100%", thickness=1, color=colors.HexColor(ROJO), spaceAfter=6),
-    ]
-
+    historia = []
     personas = sorted(personas, key=lambda p: (p.apellido.casefold(), p.nombre.casefold()))
-    for persona in personas:
+    for i, persona in enumerate(personas):
+        registros = [r for r in persona.registros if desde <= r.fecha <= hasta]
+        kits = [k for k in persona.kits if desde <= k.fecha_entrega <= hasta]
         edad = calcular_edad(persona.fecha_nacimiento, hoy)
         edad_txt = f"{edad} años" if edad is not None else "edad s/d"
-        bloque = [
-            Paragraph(f"{persona.apellido.upper()}, {persona.nombre} &nbsp;·&nbsp; {edad_txt}", nombre_st),
-            Paragraph(f"<b>Kits:</b> {resumen_kits(persona.kits)}", detalle_st),
+        nombre = f"{persona.apellido.upper()}, {persona.nombre}" if persona.apellido else persona.nombre
+
+        encabezado = Table(
+            [[Paragraph(f"{nombre} &nbsp;·&nbsp; {edad_txt}", nombre_st), Paragraph(f"Período: {periodo}", periodo_st)]],
+            colWidths=[ancho * 0.65, ancho * 0.35],
+        )
+        encabezado.setStyle(TableStyle([
+            ("VALIGN", (0, 0), (-1, -1), "BOTTOM"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 0),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+            ("LINEBELOW", (0, 0), (-1, 0), 1, colors.HexColor(ROJO)),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+        ]))
+        historia += [
+            encabezado,
+            Spacer(1, 5),
+            Paragraph(f"<b>Kits en el período:</b> {resumen_kits(kits)}", detalle_st),
+            Paragraph(f"<b>Controles en el período:</b> {len(registros)}", detalle_st),
+            Spacer(1, 6),
         ]
-        if persona.registros:
-            n = len(persona.registros)
-            ultima = max(r.fecha for r in persona.registros)
-            bloque.append(Paragraph(f"<b>Controles:</b> {n} (último {_fmt_fecha(ultima)})", detalle_st))
-            png = _grafico_persona(persona.registros)
-            bloque.append(Spacer(1, 2))
-            bloque.append(Image(png, width=ancho, height=ancho * 1.95 / 7.2))
+        if registros:
+            alto_cm = 15.2
+            png = _grafico_persona(registros, desde, hasta, ancho / cm, alto_cm)
+            historia.append(Image(png, width=ancho, height=alto_cm * cm))
         else:
-            bloque.append(Paragraph("Sin registros de signos vitales.", vacio_st))
-        bloque.append(HRFlowable(width="100%", thickness=0.4, color=colors.HexColor("#cccccc"),
-                                 spaceBefore=4, spaceAfter=6))
-        historia.append(KeepTogether(bloque))
+            historia.append(Spacer(1, 2 * cm))
+            historia.append(Paragraph("Sin controles de signos vitales en el período.", vacio_st))
+        if i < len(personas) - 1:
+            historia.append(PageBreak())
 
     if not personas:
-        historia.append(Paragraph("No hay personas cargadas.", vacio_st))
+        historia.append(Paragraph("No se eligió ninguna persona.", vacio_st))
 
     def pie(canvas, doc_):
         canvas.saveState()
-        canvas.setFont("Helvetica", 7)
+        canvas.setFont("Helvetica", 7.5)
         canvas.setFillColor(colors.HexColor("#888888"))
-        canvas.drawString(doc_.leftMargin, 0.8 * cm, "SISVAP · Cruz Roja San Rafael · Confidencial")
-        canvas.drawRightString(A4[0] - doc_.rightMargin, 0.8 * cm, f"Página {doc_.page}")
+        canvas.drawString(
+            doc_.leftMargin, 0.6 * cm,
+            f"SISVAP · Cruz Roja San Rafael · Confidencial · Generado el {ahora.strftime('%d/%m/%Y %H:%M')}",
+        )
+        canvas.drawRightString(PAGINA[0] - doc_.rightMargin, 0.6 * cm, f"Página {doc_.page}")
         canvas.restoreState()
 
     doc.build(historia, onFirstPage=pie, onLaterPages=pie)
