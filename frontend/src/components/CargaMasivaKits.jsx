@@ -3,26 +3,21 @@ import { Link } from "react-router-dom";
 import * as XLSX from "xlsx";
 import api from "../api";
 import { formatExcelDate, readExcelRows } from "../utils/excelDates";
+import {
+  INSTRUCCIONES_PERSONA,
+  filasConDatos,
+  leerPersona,
+  mapearColumnas,
+  numeroFila,
+  verificarColumnas,
+} from "../utils/planillaPersona";
 import ResultadoCarga from "./ResultadoCarga";
 import RevisionCarga from "./RevisionCarga";
 
-const normalizeHeader = (value) =>
-  value
-    .toString()
-    .trim()
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "")
-    .replace(/[_\s]+/g, " ");
-
-const HEADER_ALIASES = {
-  identificador: ["identificador", "dni", "persona", "nombre apellido", "nombre y apellido", "beneficiario"],
+const ALIAS_KITS = {
   fecha: ["fecha", "fecha entrega", "fecha de entrega", "date"],
   tipo: ["tipo", "tipo kit", "tipo de kit", "kit"],
 };
-
-const findHeaderKey = (normalizedHeader) =>
-  Object.entries(HEADER_ALIASES).find(([, aliases]) => aliases.includes(normalizedHeader))?.[0];
 
 function detalleError(err, porDefecto) {
   const detail = err.response?.data?.detail;
@@ -33,21 +28,21 @@ function detalleError(err, porDefecto) {
 
 function descargarPlanillaModelo() {
   const hoja = XLSX.utils.aoa_to_sheet([
-    ["identificador", "fecha", "tipo"],
-    ["12345678", "2026-06-04", "PPAAS"],
-    ["Juan Pérez", "2026-06-04", "ABRIGO"],
+    ["Nombre", "Apellido", "DNI", "Fecha de nacimiento", "Fecha", "Tipo"],
+    ["Juan", "Pérez", "30123456", "02/01/1980", "04/06/2026", "PPAAS"],
+    ["Ana", "Gómez", "", "", "04/06/2026", "ABRIGO"],
+    ["", "", "28999888", "", "04/06/2026", "PPAAS"],
   ]);
-  hoja["!cols"] = [{ wch: 28 }, { wch: 14 }, { wch: 10 }];
+  hoja["!cols"] = [{ wch: 16 }, { wch: 16 }, { wch: 12 }, { wch: 20 }, { wch: 12 }, { wch: 10 }];
   const instrucciones = XLSX.utils.aoa_to_sheet([
     ["Cómo completar esta planilla"],
     [""],
-    ["1. identificador: DNI (sin puntos) o Nombre y Apellido."],
-    ["2. fecha: el día en que se entregó el kit (AAAA-MM-DD o DD/MM/AAAA)."],
-    ["3. tipo: PPAAS (higiene / primeros auxilios) o ABRIGO."],
-    ["4. Una fila = un kit entregado. La misma persona puede aparecer en varias filas."],
-    ["5. Al subirla, el sistema pide confirmar los nombres parecidos y permite crear a quien no esté registrado."],
+    ...INSTRUCCIONES_PERSONA.map((t, i) => [`${i + 1}. ${t}`]),
+    [`${INSTRUCCIONES_PERSONA.length + 1}. Fecha: el día en que se entregó el kit (AAAA-MM-DD o DD/MM/AAAA).`],
+    [`${INSTRUCCIONES_PERSONA.length + 2}. Tipo: PPAAS (higiene / primeros auxilios) o ABRIGO.`],
+    [`${INSTRUCCIONES_PERSONA.length + 3}. Una fila = un kit entregado. La misma persona puede aparecer en varias filas.`],
   ]);
-  instrucciones["!cols"] = [{ wch: 100 }];
+  instrucciones["!cols"] = [{ wch: 110 }];
   const libro = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(libro, hoja, "Kits");
   XLSX.utils.book_append_sheet(libro, instrucciones, "Instrucciones");
@@ -88,26 +83,18 @@ export default function CargaMasivaKits() {
     reader.onload = (e) => {
       try {
         const { rows: rawRows, date1904 } = readExcelRows(e.target.result);
-        const filteredRows = rawRows.filter((row) =>
-          Object.values(row || {}).some((value) => value !== null && value !== undefined && String(value).trim() !== "")
-        );
+        const filteredRows = filasConDatos(rawRows);
         if (!filteredRows.length) {
           throw new Error("El archivo no contiene filas de datos útiles.");
         }
 
-        const keyMap = {};
-        Object.keys(rawRows[0]).forEach((header) => {
-          const key = findHeaderKey(normalizeHeader(header));
-          if (key) keyMap[key] = header;
-        });
-        const missing = ["identificador", "fecha", "tipo"].filter((column) => !keyMap[column]);
-        if (missing.length > 0) {
-          throw new Error(`Faltan columnas en el archivo: ${missing.join(", ")}. Descargá la planilla modelo.`);
-        }
+        const encabezados = Object.keys(rawRows[0]);
+        const keyMap = mapearColumnas(encabezados, ALIAS_KITS);
+        verificarColumnas(keyMap, encabezados, ["fecha", "tipo"]);
 
         const rows = filteredRows.map((rawRow, i) => ({
-          fila: typeof rawRow.__rowNum__ === "number" ? rawRow.__rowNum__ + 1 : i + 2,
-          identificador: rawRow[keyMap.identificador]?.toString().trim(),
+          fila: numeroFila(rawRow, i),
+          ...leerPersona(rawRow, keyMap, { date1904 }),
           fecha: formatExcelDate(rawRow[keyMap.fecha], { date1904 }),
           tipo: rawRow[keyMap.tipo]?.toString().trim(),
         }));
@@ -132,12 +119,14 @@ export default function CargaMasivaKits() {
           </Link>
         </div>
         <p>
-          Subí un Excel (.xls/.xlsx) con una fila por kit entregado y las columnas <strong>identificador</strong> (DNI o
-          Nombre y Apellido), <strong>fecha</strong> y <strong>tipo</strong> (PPAAS o ABRIGO).
+          Subí un Excel (.xls/.xlsx) con una fila por kit entregado y las columnas <strong>Nombre</strong>,{" "}
+          <strong>Apellido</strong>, <strong>DNI</strong>, <strong>Fecha</strong> y <strong>Tipo</strong> (PPAAS o
+          ABRIGO). Opcional: <strong>Fecha de nacimiento</strong>.
         </p>
         <p className="text-muted">
-          Antes de guardar se muestra una revisión: vas a confirmar los nombres parecidos y elegir a quién crear si no
-          está en la base.
+          Nombre, Apellido y DNI pueden quedar en blanco: alcanza con el nombre y apellido, o solo con el DNI. Antes de
+          guardar se muestra una revisión: confirmás los nombres parecidos, completás DNI o fecha de nacimiento a quien
+          ya existe y elegís a quién crear.
         </p>
         <div className="button-row">
           <button type="button" className="button button-outline button-small" onClick={descargarPlanillaModelo}>

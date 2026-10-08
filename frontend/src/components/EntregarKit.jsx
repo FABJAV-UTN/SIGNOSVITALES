@@ -9,19 +9,19 @@ const hoy = () => {
 };
 
 /** Últimas entregas de la persona y aviso si ya recibió ese tipo de kit hoy. */
-function KitsPrevios({ dni, tipo }) {
+function KitsPrevios({ personaId, tipo }) {
   const [kits, setKits] = useState(null);
 
   useEffect(() => {
     let cancelado = false;
     api
-      .get(`/kits/persona/${dni}`)
+      .get(`/kits/persona/${personaId}`)
       .then((res) => !cancelado && setKits(res.data))
       .catch(() => !cancelado && setKits([]));
     return () => {
       cancelado = true;
     };
-  }, [dni]);
+  }, [personaId]);
 
   if (kits === null) return <p className="text-muted small">Cargando entregas anteriores...</p>;
   const yaHoy = kits.some((k) => k.tipo === tipo && k.fecha_entrega === hoy());
@@ -47,7 +47,7 @@ function KitsPrevios({ dni, tipo }) {
 export default function EntregarKit() {
   const navigate = useNavigate();
   const location = useLocation();
-  const initialDni = location.state?.dni || "";
+  const personaInicial = location.state?.personaId || null;
 
   const [persona, setPersona] = useState(location.state?.persona || null);
   const [tipo, setTipo] = useState("PPAAS");
@@ -68,9 +68,9 @@ export default function EntregarKit() {
     setMessage("");
     setLoading(true);
     try {
-      await api.post("/kits", { dni: persona.dni, tipo });
+      await api.post("/kits", { persona_id: persona.id, tipo });
       setMessage(`Kit ${tipo} entregado correctamente a ${persona.nombre} ${persona.apellido}.`);
-      if (initialDni) {
+      if (personaInicial) {
         setTimeout(() => navigate("/personas/buscar"), 1500);
       } else {
         // Listo para la siguiente persona.
@@ -106,8 +106,8 @@ export default function EntregarKit() {
 
         {message && <div className="alert alert-success">{message}</div>}
 
-        <PersonaSelector persona={persona} onChange={elegirPersona} dniInicial={initialDni}>
-          {persona && <KitsPrevios key={persona.dni} dni={persona.dni} tipo={tipo} />}
+        <PersonaSelector persona={persona} onChange={elegirPersona} personaIdInicial={personaInicial}>
+          {persona && <KitsPrevios key={persona.id} personaId={persona.id} tipo={tipo} />}
         </PersonaSelector>
 
         {persona && (

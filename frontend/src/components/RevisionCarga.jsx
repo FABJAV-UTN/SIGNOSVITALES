@@ -1,9 +1,11 @@
 import { useMemo, useState } from "react";
 import api from "../api";
 import { GENEROS } from "../utils/genero";
+import { fechaCorta, textoDni } from "../utils/persona";
 
 const listaFilas = (filas) => (filas.length === 1 ? `fila ${filas[0]}` : `filas ${filas.join(", ")}`);
 const cantFilas = (n) => `${n} ${n === 1 ? "fila" : "filas"}`;
+const nombrePlanilla = (r) => [r.nombre_sugerido, r.apellido_sugerido].filter(Boolean).join(" ");
 
 function detalleError(err, porDefecto) {
   const detail = err.response?.data?.detail;
@@ -13,37 +15,80 @@ function detalleError(err, porDefecto) {
 }
 
 /**
- * Paso de revisión de una carga masiva (signos o kits):
- * 1) confirma los nombres que se parecen a alguien de la base,
- * 2) lista a los que no están y deja tildar a quién crear,
- * 3) crea las personas tildadas y manda las filas a `endpoint` con la persona ya resuelta.
+ * Datos de la planilla (DNI, fecha de nacimiento) que difieren de los de la persona elegida.
+ * "completar": la persona no lo tiene. "cambiar": la persona tiene otro valor.
+ * El DNI no se propone si ya lo tiene otra persona de la base.
+ */
+function cambiosPara(r, persona) {
+  if (!persona) return [];
+  const cambios = [];
+  if (r.dni && r.dni !== persona.dni && (!r.dni_en_uso_por || r.dni_en_uso_por === persona.id)) {
+    cambios.push({ campo: "dni", valor: r.dni, actual: persona.dni, tipo: persona.dni ? "cambiar" : "completar" });
+  }
+  if (r.fecha_nacimiento && r.fecha_nacimiento !== persona.fecha_nacimiento) {
+    cambios.push({
+      campo: "fecha_nacimiento",
+      valor: r.fecha_nacimiento,
+      actual: persona.fecha_nacimiento,
+      tipo: persona.fecha_nacimiento ? "cambiar" : "completar",
+    });
+  }
+  return cambios;
+}
+
+// Por defecto se completa lo que falta y se actualiza la fecha de nacimiento.
+// Cambiar un DNI que ya estaba cargado queda destildado: hay que confirmarlo a mano.
+const marcadoPorDefecto = (cambio) => !(cambio.campo === "dni" && cambio.tipo === "cambiar");
+
+function textoCambio(c) {
+  const etiqueta = c.campo === "dni" ? "DNI" : "fecha de nacimiento";
+  const mostrar = (v) => (c.campo === "dni" ? v : fechaCorta(v));
+  return c.tipo === "completar"
+    ? `Completar ${etiqueta}: ${mostrar(c.valor)}`
+    : `Cambiar ${etiqueta}: ${mostrar(c.actual)} → ${mostrar(c.valor)}`;
+}
+
+/**
+ * Paso de revisión de una carga masiva (personas, signos o kits):
+ * 1) confirma a quién corresponde cada persona dudosa (nombre parecido, homónimo o DNI de otro),
+ * 2) ofrece completar/actualizar el DNI y la fecha de nacimiento de las personas que ya existen,
+ * 3) lista a los que no están y deja tildar a quién crear,
+ * 4) aplica los cambios, crea las personas y (si hay `endpoint`) manda las filas con la persona resuelta.
  */
 export default function RevisionCarga({ data, preview, endpoint, onCancelar, onTerminado }) {
-  const aConfirmar = preview.identificadores.filter((r) => r.estado === "sugerencia" || r.estado === "ambigua");
+  const aConfirmar = preview.identificadores.filter((r) => ["sugerencia", "ambigua", "conflicto_dni"].includes(r.estado));
   const exactas = preview.identificadores.filter((r) => r.estado === "exacta");
 
   // Respuesta para cada coincidencia: id de persona (texto), "nueva", "omitir" o "" (sin responder).
   const [decisiones, setDecisiones] = useState(() => Object.fromEntries(aConfirmar.map((r) => [r.identificador, ""])));
+  // Tildes de "completar / actualizar datos": clave identificador|persona|campo.
+  const [marcas, setMarcas] = useState({});
   // Datos para dar de alta a quien no está en la base.
-  const [altas, setAltas] = useState(() =>
-    Object.fromEntries(
+  const [altas, setAltas] = useState(() => {
+    const filaPorNumero = Object.fromEntries(data.rows.map((row) => [row.fila, row]));
+    return Object.fromEntries(
       preview.identificadores
         .filter((r) => r.estado !== "exacta")
-        .map((r) => [
-          r.identificador,
-          {
-            crear: true,
-            unir: Boolean(r.parecido_a),
-            nombre: r.nombre_sugerido || "",
-            apellido: r.apellido_sugerido || "",
-            dni: /^\d{6,9}$/.test(r.identificador.replace(/[\s.-]/g, "")) ? r.identificador.replace(/[\s.-]/g, "") : "",
-            genero: "",
-            fecha_nacimiento: "",
-            situacion_de_calle: false,
-          },
-        ])
-    )
-  );
+        .map((r) => {
+          const filas = r.filas.map((f) => filaPorNumero[f]).filter(Boolean);
+          const primero = (campo) => filas.map((f) => f[campo]).find((v) => v !== null && v !== undefined && v !== "");
+          return [
+            r.identificador,
+            {
+              crear: true,
+              unir: Boolean(r.parecido_a),
+              nombre: r.nombre_sugerido || "",
+              apellido: r.apellido_sugerido || "",
+              // Si el DNI de la planilla ya lo tiene otra persona, no se puede repetir.
+              dni: r.dni_en_uso_por ? "" : r.dni || "",
+              genero: primero("genero") || "",
+              fecha_nacimiento: r.fecha_nacimiento || "",
+              situacion_de_calle: Boolean(primero("situacion_de_calle")),
+            },
+          ];
+        })
+    );
+  });
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState("");
 
@@ -63,6 +108,23 @@ export default function RevisionCarga({ data, preview, endpoint, onCancelar, onT
   const aCrear = noEncontradas.filter((r) => altas[r.identificador]?.crear && !destinoUnion(r));
   const faltanDatos = aCrear.filter((r) => !altas[r.identificador].nombre.trim());
 
+  // Persona elegida para cada grupo (las exactas y las confirmadas).
+  const elegidas = [];
+  exactas.forEach((r) => elegidas.push({ r, persona: r.persona }));
+  aConfirmar.forEach((r) => {
+    const d = decisiones[r.identificador];
+    const persona = r.candidatos.find((c) => String(c.id) === d);
+    if (persona) elegidas.push({ r, persona });
+  });
+  const conCambios = elegidas
+    .map(({ r, persona }) => ({ r, persona, cambios: cambiosPara(r, persona) }))
+    .filter((x) => x.cambios.length > 0);
+  const claveMarca = (r, persona, c) => `${r.identificador}|${persona.id}|${c.campo}`;
+  const estaMarcado = (r, persona, c) => marcas[claveMarca(r, persona, c)] ?? marcadoPorDefecto(c);
+  const cambiosMarcados = conCambios.flatMap(({ r, persona, cambios }) =>
+    cambios.filter((c) => estaMarcado(r, persona, c)).map((c) => ({ persona, ...c }))
+  );
+
   const resumen = useMemo(() => {
     let filasACargar = 0;
     let filasOmitidas = 0;
@@ -78,6 +140,11 @@ export default function RevisionCarga({ data, preview, endpoint, onCancelar, onT
     }
     return { filasACargar, filasOmitidas };
   }, [preview, decisiones, altas]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const personasAActualizar = new Set(cambiosMarcados.map((c) => c.persona.id)).size;
+  const hayAlgoParaHacer = endpoint
+    ? resumen.filasACargar > 0 || aCrear.length > 0 || cambiosMarcados.length > 0
+    : aCrear.length > 0 || cambiosMarcados.length > 0;
 
   function actualizarAlta(identificador, cambios) {
     setAltas((prev) => ({ ...prev, [identificador]: { ...prev[identificador], ...cambios } }));
@@ -98,25 +165,33 @@ export default function RevisionCarga({ data, preview, endpoint, onCancelar, onT
     setEnviando(true);
     const errores = preview.invalidas.map((f) => `Fila ${f.fila}: ${f.error}`);
     try {
-      // 1) Personas por identificador: las que ya existen y las confirmadas.
+      // 1) Completar / actualizar DNI y fecha de nacimiento de personas existentes.
+      let actualizadas = 0;
+      if (cambiosMarcados.length > 0) {
+        const porPersona = {};
+        cambiosMarcados.forEach((c) => {
+          porPersona[c.persona.id] = { ...(porPersona[c.persona.id] || { persona_id: c.persona.id }), [c.campo]: c.valor };
+        });
+        const res = await api.post("/personas/actualizar", { cambios: Object.values(porPersona) });
+        actualizadas = res.data.ok;
+        errores.push(...(res.data.errores || []));
+      }
+
+      // 2) Personas por identificador: las que ya existen y las confirmadas.
       const personaPor = {};
-      exactas.forEach((r) => {
-        personaPor[r.identificador] = r.persona.id;
-      });
-      aConfirmar.forEach((r) => {
-        const d = decisiones[r.identificador];
-        if (d && d !== "nueva" && d !== "omitir") personaPor[r.identificador] = Number(d);
+      elegidas.forEach(({ r, persona }) => {
+        personaPor[r.identificador] = persona.id;
       });
 
-      // 2) Crear las personas tildadas.
+      // 3) Crear las personas tildadas.
       let creadas = [];
       if (aCrear.length > 0) {
         const filasAlta = aCrear.map((r) => {
           const a = altas[r.identificador];
           return {
             nombre: a.nombre.trim(),
-            apellido: a.apellido.trim() || "Sin apellido",
-            dni: a.dni.trim(),
+            apellido: a.apellido.trim(),
+            dni: a.dni.trim() || null,
             genero: a.genero || null,
             fecha_nacimiento: a.fecha_nacimiento || null,
             situacion_de_calle: a.situacion_de_calle,
@@ -127,7 +202,7 @@ export default function RevisionCarga({ data, preview, endpoint, onCancelar, onT
         creadas = (res.data.creadas || []).map((c) => {
           const r = aCrear[c.fila - 1];
           personaPor[r.identificador] = c.id;
-          return { ...c, provisorio: !altas[r.identificador].dni.trim() };
+          return c;
         });
       }
       noEncontradas.forEach((r) => {
@@ -135,35 +210,55 @@ export default function RevisionCarga({ data, preview, endpoint, onCancelar, onT
         if (destino && personaPor[destino]) personaPor[r.identificador] = personaPor[destino];
       });
 
-      // 3) Armar las filas con la persona ya resuelta.
-      const identPorFila = {};
-      preview.identificadores.forEach((r) => r.filas.forEach((f) => (identPorFila[f] = r.identificador)));
+      // 4) Armar las filas con la persona ya resuelta (solo signos y kits).
+      let ok = creadas.length + actualizadas;
       let omitidas = 0;
-      const filas = [];
-      data.rows.forEach((row) => {
-        const ident = identPorFila[row.fila];
-        if (!ident) return; // fila inválida: ya está en la lista de errores
-        const personaId = personaPor[ident];
-        if (!personaId) {
-          omitidas += 1;
-          return;
-        }
-        filas.push({ ...row, persona_id: personaId });
-      });
+      if (endpoint) {
+        const identPorFila = {};
+        preview.identificadores.forEach((r) => r.filas.forEach((f) => (identPorFila[f] = r.identificador)));
+        const filas = [];
+        data.rows.forEach((row) => {
+          const ident = identPorFila[row.fila];
+          if (!ident) return; // fila inválida: ya está en la lista de errores
+          const personaId = personaPor[ident];
+          if (!personaId) {
+            omitidas += 1;
+            return;
+          }
+          filas.push({ ...row, persona_id: personaId });
+        });
 
-      let ok = 0;
-      if (filas.length > 0) {
-        // Se reenvían los campos generales del payload (ej. operativo_id / lugar_custom en signos).
-        const res = await api.post(endpoint, { ...data, rows: filas });
-        ok = res.data.ok;
-        errores.push(...(res.data.errores || []));
+        ok = 0;
+        if (filas.length > 0) {
+          // Se reenvían los campos generales del payload (ej. operativo_id / lugar_custom en signos).
+          const res = await api.post(endpoint, { ...data, rows: filas });
+          ok = res.data.ok;
+          errores.push(...(res.data.errores || []));
+        }
       }
-      onTerminado({ ok, errores, creadas, omitidas });
+      onTerminado({ ok, errores, creadas, omitidas, actualizadas });
     } catch (err) {
       setError(detalleError(err, "No se pudo completar la carga."));
     } finally {
       setEnviando(false);
     }
+  }
+
+  function preguntaConfirmacion(r) {
+    if (r.estado === "conflicto_dni" && r.dni_en_uso_por) {
+      const duenio = r.candidatos.find((c) => c.id === r.dni_en_uso_por);
+      return (
+        <>
+          El DNI {r.dni} ya es de <strong>{duenio ? `${duenio.nombre} ${duenio.apellido}` : "otra persona"}</strong>, pero
+          la planilla dice “{nombrePlanilla(r) || "sin nombre"}”. ¿Quién es?
+        </>
+      );
+    }
+    if (r.estado === "conflicto_dni") {
+      return <>Hay una persona con ese nombre pero con otro DNI (la planilla dice {r.dni}). ¿Es la misma persona?</>;
+    }
+    if (r.estado === "ambigua") return "Hay más de una persona con ese nombre. ¿Cuál es?";
+    return "¿Es alguna de estas personas?";
   }
 
   return (
@@ -173,6 +268,7 @@ export default function RevisionCarga({ data, preview, endpoint, onCancelar, onT
         <span className="chip">{cantFilas(preview.total_filas)}</span>
         <span className="chip chip-ok">{exactas.length} persona(s) encontradas</span>
         {aConfirmar.length > 0 && <span className="chip chip-warn">{aConfirmar.length} a confirmar</span>}
+        {conCambios.length > 0 && <span className="chip chip-warn">{conCambios.length} con datos para completar</span>}
         {noEncontradas.length > 0 && <span className="chip chip-new">{noEncontradas.length} no están en la base</span>}
         {preview.invalidas.length > 0 && <span className="chip chip-error">{cantFilas(preview.invalidas.length)} con errores</span>}
       </div>
@@ -181,7 +277,7 @@ export default function RevisionCarga({ data, preview, endpoint, onCancelar, onT
         <div className="revision-block">
           <h3>Coincidencias a confirmar</h3>
           <p className="text-muted">
-            Estos nombres no coinciden exacto con nadie de la base, pero se parecen. Elegí quién es cada uno.
+            Estas personas no coinciden exacto con nadie de la base, o el DNI no cuadra con el nombre. Elegí quién es cada una.
           </p>
           {aConfirmar.map((r) => (
             <fieldset key={r.identificador} className={`match-card ${decisiones[r.identificador] ? "" : "match-pending"}`}>
@@ -191,9 +287,7 @@ export default function RevisionCarga({ data, preview, endpoint, onCancelar, onT
                   · {cantFilas(r.filas.length)} ({listaFilas(r.filas)})
                 </span>
               </legend>
-              <p className="match-question">
-                {r.estado === "ambigua" ? "Hay más de una persona con ese nombre. ¿Cuál es?" : "¿Es alguna de estas personas?"}
-              </p>
+              <p className="match-question">{preguntaConfirmacion(r)}</p>
               {r.candidatos.map((c) => (
                 <label key={c.id} className="radio-line">
                   <input
@@ -203,7 +297,7 @@ export default function RevisionCarga({ data, preview, endpoint, onCancelar, onT
                     onChange={() => setDecisiones((d) => ({ ...d, [r.identificador]: String(c.id) }))}
                   />
                   <span>
-                    Sí, es <strong>{c.nombre} {c.apellido}</strong> <span className="text-muted">— DNI {c.dni}</span>
+                    Sí, es <strong>{c.nombre} {c.apellido}</strong> <span className="text-muted">— {textoDni(c)}</span>
                     {r.estado === "sugerencia" && <span className="similitud">{Math.round(c.similitud * 100)}% parecido</span>}
                   </span>
                 </label>
@@ -215,7 +309,10 @@ export default function RevisionCarga({ data, preview, endpoint, onCancelar, onT
                   checked={decisiones[r.identificador] === "nueva"}
                   onChange={() => setDecisiones((d) => ({ ...d, [r.identificador]: "nueva" }))}
                 />
-                <span>No, es otra persona (pasa a la lista de personas que no están en la base)</span>
+                <span>
+                  No, es otra persona (pasa a la lista de personas que no están en la base
+                  {r.dni_en_uso_por ? "; se crea sin ese DNI" : ""})
+                </span>
               </label>
               <label className="radio-line">
                 <input
@@ -227,6 +324,42 @@ export default function RevisionCarga({ data, preview, endpoint, onCancelar, onT
                 <span>No cargar estas filas</span>
               </label>
             </fieldset>
+          ))}
+        </div>
+      )}
+
+      {conCambios.length > 0 && (
+        <div className="revision-block">
+          <h3>Datos para completar o actualizar</h3>
+          <p className="text-muted">
+            La planilla trae datos que estas personas no tienen (o tienen distinto). Destildá lo que no quieras cambiar.
+          </p>
+          {conCambios.map(({ r, persona, cambios }) => (
+            <div key={`${r.identificador}|${persona.id}`} className="match-card">
+              <p>
+                <strong>
+                  {persona.nombre} {persona.apellido}
+                </strong>{" "}
+                <span className="text-muted">
+                  · {textoDni(persona)} · {listaFilas(r.filas)}
+                </span>
+              </p>
+              {cambios.map((c) => (
+                <label key={c.campo} className="radio-line">
+                  <input
+                    type="checkbox"
+                    checked={estaMarcado(r, persona, c)}
+                    onChange={(e) => setMarcas((m) => ({ ...m, [claveMarca(r, persona, c)]: e.target.checked }))}
+                  />
+                  <span>
+                    {textoCambio(c)}
+                    {c.campo === "dni" && c.tipo === "cambiar" && (
+                      <span className="text-muted small"> (ya tenía DNI cargado: confirmá que el de la planilla es el correcto)</span>
+                    )}
+                  </span>
+                </label>
+              ))}
+            </div>
           ))}
         </div>
       )}
@@ -292,15 +425,15 @@ export default function RevisionCarga({ data, preview, endpoint, onCancelar, onT
                   <div className="alta-campos">
                     <label>
                       Nombre
-                      <input value={alta.nombre} onChange={(e) => actualizarAlta(r.identificador, { nombre: e.target.value })} />
+                      <input
+                        value={alta.nombre}
+                        placeholder={r.nombre_sugerido ? "" : "Completar"}
+                        onChange={(e) => actualizarAlta(r.identificador, { nombre: e.target.value })}
+                      />
                     </label>
                     <label>
                       Apellido
-                      <input
-                        value={alta.apellido}
-                        placeholder="Sin apellido"
-                        onChange={(e) => actualizarAlta(r.identificador, { apellido: e.target.value })}
-                      />
+                      <input value={alta.apellido} onChange={(e) => actualizarAlta(r.identificador, { apellido: e.target.value })} />
                     </label>
                     <label>
                       DNI
@@ -344,7 +477,10 @@ export default function RevisionCarga({ data, preview, endpoint, onCancelar, onT
               </div>
             );
           })}
-          <p className="text-muted small">Si no ponés DNI, se le asigna uno provisorio.</p>
+          <p className="text-muted small">
+            DNI y fecha de nacimiento son opcionales: si no los ponés, quedan en blanco y se pueden completar después desde
+            la ficha de la persona o con otra planilla.
+          </p>
         </div>
       )}
 
@@ -363,13 +499,25 @@ export default function RevisionCarga({ data, preview, endpoint, onCancelar, onT
 
       <div className="revision-footer">
         <p>
-          Se van a cargar <strong>{cantFilas(resumen.filasACargar)}</strong>
+          {endpoint ? (
+            <>
+              Se van a cargar <strong>{cantFilas(resumen.filasACargar)}</strong>
+            </>
+          ) : (
+            <>Personas que ya estaban: {exactas.length}</>
+          )}
           {aCrear.length > 0 && (
             <>
-              {" "}y crear <strong>{aCrear.length} persona(s)</strong>
+              {endpoint ? " y crear " : "; se van a crear "}
+              <strong>{aCrear.length} persona(s)</strong>
             </>
           )}
-          {resumen.filasOmitidas > 0 && <>; se omiten {cantFilas(resumen.filasOmitidas)}</>}.
+          {personasAActualizar > 0 && (
+            <>
+              ; se actualizan datos de <strong>{personasAActualizar} persona(s)</strong>
+            </>
+          )}
+          {endpoint && resumen.filasOmitidas > 0 && <>; se omiten {cantFilas(resumen.filasOmitidas)}</>}.
         </p>
         {pendientes.length > 0 && (
           <div className="alert alert-warning">Faltan {pendientes.length} coincidencia(s) por confirmar.</div>
@@ -382,7 +530,7 @@ export default function RevisionCarga({ data, preview, endpoint, onCancelar, onT
           <button
             type="button"
             className="button button-primary"
-            disabled={enviando || pendientes.length > 0 || faltanDatos.length > 0 || (resumen.filasACargar === 0 && aCrear.length === 0)}
+            disabled={enviando || pendientes.length > 0 || faltanDatos.length > 0 || !hayAlgoParaHacer}
             onClick={confirmar}
           >
             {enviando ? "Cargando..." : "Confirmar y cargar"}

@@ -12,8 +12,8 @@ from pydantic import ValidationError
 from ..auth import get_current_user
 from ..database import get_session
 from ..models import Kit, Persona
-from ..revision import revisar_identificadores
-from ..routers.signos import _find_persona_by_identificador
+from ..revision import revisar_filas
+from ..routers.signos import persona_de_fila, persona_de_pedido
 from ..schemas import (
     BulkPreviewResponse,
     FilaInvalida,
@@ -30,11 +30,7 @@ router = APIRouter(prefix="/kits", tags=["kits"])
 
 @router.post("", response_model=KitRead, status_code=201)
 async def entregar_kit(kit_in: KitCreate, user: dict = Depends(get_current_user), db: AsyncSession = Depends(get_session)):
-    dni_clean = re.sub(r"[\s.-]", "", kit_in.dni.strip())
-    persona_res = await db.execute(select(Persona).where(or_(Persona.dni == kit_in.dni, Persona.dni == dni_clean)))
-    persona = persona_res.scalar_one_or_none()
-    if not persona:
-        raise HTTPException(status_code=404, detail="Persona no encontrada")
+    persona = await persona_de_pedido(kit_in.persona_id, kit_in.dni, db)
     kit = Kit(persona_id=persona.id, tipo=kit_in.tipo, fecha_entrega=date.today())
     db.add(kit)
     await db.commit()
@@ -102,18 +98,14 @@ async def dias_con_entregas(db: AsyncSession = Depends(get_session)):
     ]
 
 
-@router.get("/persona/{dni}", response_model=list[KitRead], dependencies=[Depends(get_current_user)])
-async def historial_kits_persona(dni: str, db: AsyncSession = Depends(get_session)):
-    dni_clean = re.sub(r"[\s.-]", "", dni.strip())
-    persona_res = await db.execute(select(Persona).where(or_(Persona.dni == dni, Persona.dni == dni_clean)))
-    persona = persona_res.scalar_one_or_none()
-    if not persona:
+@router.get("/persona/{persona_id}", response_model=list[KitRead], dependencies=[Depends(get_current_user)])
+async def historial_kits_persona(persona_id: int, db: AsyncSession = Depends(get_session)):
+    if await db.get(Persona, persona_id) is None:
         raise HTTPException(status_code=404, detail="Persona no encontrada")
-
     consulta = (
         select(Kit)
         .options(selectinload(Kit.persona))
-        .where(Kit.persona_id == persona.id)
+        .where(Kit.persona_id == persona_id)
         .order_by(Kit.fecha_entrega.desc(), Kit.id.desc())
     )
     resultado = await db.execute(consulta)
@@ -146,17 +138,17 @@ async def revisar_kits_bulk(
 ):
     """Revisión previa (no guarda nada), igual que la de signos: ver app/revision.py."""
     personas = (await db.execute(select(Persona))).scalars().all()
-    validas: list[tuple[int, str]] = []
+    validas: list[tuple[int, KitBulkRow]] = []
     invalidas: list[FilaInvalida] = []
     for index, raw_row in enumerate(bulk_request.rows, start=1):
         row, fila, error = _parsear_fila_kit(raw_row, index)
         if error:
             invalidas.append(FilaInvalida(fila=fila, error=error))
         else:
-            validas.append((fila, row.identificador))
+            validas.append((fila, row))
     return BulkPreviewResponse(
         total_filas=len(bulk_request.rows),
-        identificadores=revisar_identificadores(validas, personas),
+        identificadores=revisar_filas(validas, personas),
         invalidas=invalidas,
     )
 
@@ -175,20 +167,10 @@ async def cargar_kits_bulk(
             errores.append(f"Fila {fila}: {error}")
             continue
 
-        if row.persona_id is not None:
-            persona = (await db.execute(select(Persona).where(Persona.id == row.persona_id))).scalar_one_or_none()
-            if not persona:
-                errores.append(f"Fila {fila}: la persona seleccionada ya no existe")
-                continue
-        else:
-            try:
-                persona = await _find_persona_by_identificador(row.identificador, db)
-            except HTTPException as exc:
-                errores.append(f"Fila {fila}: {exc.detail}")
-                continue
-            if not persona:
-                errores.append(f"Fila {fila}: persona no encontrada para '{row.identificador}'")
-                continue
+        persona, error_persona = await persona_de_fila(row, db)
+        if error_persona:
+            errores.append(f"Fila {fila}: {error_persona}")
+            continue
 
         duplicado = await db.execute(
             select(Kit.id).where(Kit.persona_id == persona.id, Kit.tipo == row.tipo, Kit.fecha_entrega == row.fecha)

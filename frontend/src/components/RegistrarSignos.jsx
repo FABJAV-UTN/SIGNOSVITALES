@@ -6,7 +6,7 @@ import PersonaSelector from "./PersonaSelector";
 export default function RegistrarSignos() {
   const navigate = useNavigate();
   const location = useLocation();
-  const initialDni = location.state?.dni || "";
+  const personaInicial = location.state?.personaId || null;
 
   const [persona, setPersona] = useState(null);
   const [presion, setPresion] = useState("");
@@ -30,7 +30,7 @@ export default function RegistrarSignos() {
     setLoading(true);
     try {
       await api.post("/signos", {
-        dni: persona.dni,
+        persona_id: persona.id,
         presion_arterial: presion.trim() || null,
         frecuencia_cardiaca: fc !== "" ? Number(fc) : null,
         oxigenacion_sangre: spo2 !== "" ? Number(spo2) : null,
@@ -39,7 +39,7 @@ export default function RegistrarSignos() {
       setPresion("");
       setFc("");
       setSpo2("");
-      if (initialDni) {
+      if (personaInicial) {
         setTimeout(() => navigate("/personas/buscar"), 1200);
       } else {
         // Listo para la siguiente persona.
@@ -71,7 +71,7 @@ export default function RegistrarSignos() {
 
         {message && <div className="alert alert-success">{message}</div>}
 
-        <PersonaSelector persona={persona} onChange={elegirPersona} dniInicial={initialDni} />
+        <PersonaSelector persona={persona} onChange={elegirPersona} personaIdInicial={personaInicial} />
 
         {persona && (
           <form onSubmit={handleSubmit} className="form-after-persona">

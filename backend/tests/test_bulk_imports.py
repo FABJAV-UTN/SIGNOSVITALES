@@ -35,30 +35,30 @@ def test_personas_bulk_handles_duplicates_and_invalid_rows():
             )
 
             assert result["ok"] == 2
-            assert any("ya existe" in error.lower() or "duplicada" in error.lower() for error in result["errores"])
+            assert any("repetido" in error.lower() for error in result["errores"])
 
     asyncio.run(_run())
 
 
-def test_personas_bulk_uses_default_value_for_empty_dni():
+def test_personas_bulk_sin_dni_quedan_sin_dni():
     async def _run():
         await reset_db()
         async with AsyncSessionLocal() as session:
             result = await cargar_personas_bulk(
                 PersonaBulkRequest(
                     rows=[
-                        {"nombre": "", "apellido": "", "dni": "", "genero": "Masculino"},
-                        {"nombre": "", "apellido": "", "dni": "", "genero": "Femenino"},
+                        {"nombre": "Ana", "apellido": "Uno", "dni": "", "genero": "Femenino"},
+                        {"nombre": "Beto", "apellido": "Dos", "dni": None, "genero": "Masculino"},
+                        {"nombre": "", "apellido": "SinNombre", "dni": ""},
                     ]
                 ),
                 db=session,
             )
 
             assert result["ok"] == 2
-            assert not any("string should match pattern" in error.lower() for error in result["errores"])
-            assert not any("ya existe" in error.lower() for error in result["errores"])
+            assert result["errores"] == ["Fila 3: falta el nombre (SinNombre)"]
             rows = (await session.execute(select(Persona))).scalars().all()
-            assert {persona.dni for persona in rows} == {"90000001", "90000002"}
+            assert {persona.dni for persona in rows} == {None}
 
     asyncio.run(_run())
 
@@ -74,7 +74,7 @@ def test_bulk_signos_accepts_excel_local_dates():
             result = await cargar_signos_bulk(
                 SignosBulkRequest(
                     rows=[
-                        {"identificador": "juan perez", "signos": "120/80-75-98.5", "fecha": "04/06/2026"},
+                        {"nombre": "juan", "apellido": "perez", "signos": "120/80-75-98.5", "fecha": "04/06/2026"},
                     ]
                 ),
                 user={"username": "voluntario", "role": "voluntario"},
@@ -98,8 +98,8 @@ def test_bulk_signos_matches_case_insensitive_and_reports_missing_personas():
             result = await cargar_signos_bulk(
                 SignosBulkRequest(
                     rows=[
-                        {"identificador": "juan perez", "signos": "120/80-75-98.5", "fecha": "2026-06-04"},
-                        {"identificador": "Pedro Gomez", "signos": "110/70-80-97", "fecha": "2026-06-04"},
+                        {"nombre": "juan", "apellido": "perez", "signos": "120/80-75-98.5", "fecha": "2026-06-04"},
+                        {"nombre": "Pedro", "apellido": "Gomez", "signos": "110/70-80-97", "fecha": "2026-06-04"},
                     ]
                 ),
                 user={"username": "voluntario", "role": "voluntario"},
@@ -124,9 +124,9 @@ def test_bulk_signos_acepta_fechas_formato_eeuu_y_argentino():
             result = await cargar_signos_bulk(
                 SignosBulkRequest(
                     rows=[
-                        {"identificador": "12345678", "signos": "120/80-75-98", "fecha": "8/27/26"},
-                        {"identificador": "12345678", "signos": "120/80-75-97", "fecha": "27/08/2026"},
-                        {"identificador": "12345678", "signos": "120/80-75-96", "fecha": 46261},
+                        {"dni": "12345678", "signos": "120/80-75-98", "fecha": "8/27/26"},
+                        {"dni": "12345678", "signos": "120/80-75-97", "fecha": "27/08/2026"},
+                        {"dni": "12345678", "signos": "120/80-75-96", "fecha": 46261},
                     ]
                 ),
                 user={"username": "voluntario", "role": "voluntario"},
@@ -152,8 +152,8 @@ def test_bulk_signos_fecha_invalida_solo_descarta_esa_fila():
             # Construir el request NO debe lanzar ValidationError.
             request = SignosBulkRequest(
                 rows=[
-                    {"identificador": "12345678", "signos": "120/80-75-98", "fecha": "2026-27-08"},
-                    {"identificador": "12345678", "signos": "120/80-75-98", "fecha": "2026-08-27"},
+                    {"dni": "12345678", "signos": "120/80-75-98", "fecha": "2026-27-08"},
+                    {"dni": "12345678", "signos": "120/80-75-98", "fecha": "2026-08-27"},
                 ]
             )
             result = await cargar_signos_bulk(request, user={"username": "voluntario", "role": "voluntario"}, db=session)
@@ -187,8 +187,8 @@ def test_bulk_signos_endpoint_http_no_devuelve_422_por_una_fecha():
                 "/api/signos/bulk",
                 json={
                     "rows": [
-                        {"identificador": "12345678", "signos": "120/80-75-98", "fecha": "2026-27-08"},
-                        {"identificador": "12345678", "signos": "120/80-75-98", "fecha": "2026-08-27"},
+                        {"dni": "12345678", "signos": "120/80-75-98", "fecha": "2026-27-08"},
+                        {"dni": "12345678", "signos": "120/80-75-98", "fecha": "2026-08-27"},
                     ]
                 },
             )

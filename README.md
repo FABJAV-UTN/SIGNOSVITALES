@@ -10,7 +10,7 @@ Proyecto de Práctica Profesional Supervisada (PPS), Tecnicatura Universitaria e
 
 ## Funcionalidades
 
-- **Personas:** alta con DNI único y género (V / M / No binario), búsqueda por DNI, nombre o apellido (sin importar tildes), y ficha con totales de signos y kits.
+- **Personas:** alta con DNI opcional (único si se carga) y género (V / M / No binario), búsqueda por DNI, nombre o apellido (sin importar tildes), y ficha con totales de signos y kits.
 - **Signos vitales:** registro individual con buscador con sugerencias, e historial por persona con gráfico de evolución (solo administrador).
 - **Kits:** entrega individual, con aviso si la persona ya recibió ese tipo de kit en el día, e historial de entregas con totales y filtros.
 - **Cargas masivas desde Excel** de personas, signos y kits:
@@ -187,17 +187,25 @@ ipconfig getifaddr en0
 
 ## Cargas masivas desde Excel
 
-Los encabezados no distinguen mayúsculas, tildes ni guiones bajos.
+Los encabezados no distinguen mayúsculas, tildes ni guiones bajos. Las tres planillas comparten las columnas de la persona: **Nombre**, **Apellido**, **DNI** y (opcional) **Fecha de nacimiento**. Las columnas tienen que estar, pero las celdas pueden quedar en blanco: alcanza con nombre y apellido, o solo con el DNI. Cada página ofrece descargar una planilla modelo.
 
-| Carga | Columnas |
+| Carga | Columnas además de las de la persona |
 |---|---|
-| Personas | `nombre`, `apellido`, `dni` (opcionales: `fecha_nacimiento`, `genero`, `situacion_de_calle`) |
-| Signos | `identificador` (DNI o Nombre y Apellido), `fecha`, `presion_arterial`, `frecuencia_cardiaca`, `oxigenacion_sangre` |
-| Kits | `identificador`, `fecha`, `tipo` (PPAAS o ABRIGO). La página ofrece descargar una planilla modelo. |
+| Personas | opcionales: `genero`, `situacion_de_calle` |
+| Signos | `fecha`, `presion_arterial`, `frecuencia_cardiaca`, `oxigenacion_sangre` |
+| Kits | `fecha`, `tipo` (PPAAS o ABRIGO) |
+
+Antes de guardar, las tres cargas muestran la misma **revisión**:
+
+- Con DNI que ya está en la base, es esa persona. Si el nombre no se parece al de la base, se pide confirmar (puede ser un DNI mal anotado).
+- Con DNI que no está en la base, se busca por nombre: si aparece alguien con ese nombre **sin DNI**, se ofrece completárselo; si aparece con otro DNI, se pide confirmar.
+- Sin DNI, se busca por nombre (exacto o parecido) y se confirman los dudosos.
+- Si la planilla trae DNI o fecha de nacimiento que la persona no tiene (o tiene distinta), se ofrece completarlos o actualizarlos (cambiar un DNI ya cargado queda destildado por defecto).
+- Quien no está se puede crear desde ahí mismo, con o sin DNI.
 
 - **Fechas:** celda con formato de fecha, `AAAA-MM-DD` o `DD/MM/AAAA`.
 - **Género:** `V` (varón), `M` (mujer) o `No binario`. Si la planilla usa la convención vieja M/F, la M se toma como masculino.
-- **Personas creadas sin DNI:** reciben un DNI provisorio que empieza con 9.
+- **Personas sin DNI:** quedan con el DNI vacío y se completa después (desde "Editar datos" en la ficha o con otra planilla que lo traiga). Los DNI provisorios 90xxxxxx que usaba antes el sistema se vaciaron automáticamente.
 
 ## Base de datos
 

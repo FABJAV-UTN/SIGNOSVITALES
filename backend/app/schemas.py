@@ -122,6 +122,26 @@ def format_validation_errors(exc: ValidationError) -> str:
     return ", ".join(partes)
 
 
+def limpiar_dni_opcional(v: Any) -> Optional[str]:
+    """'30.123.456', ' 30123456 ', 30123456 o 30123456.0 -> '30123456'; vacío -> None."""
+    if v is None:
+        return None
+    if isinstance(v, float) and v.is_integer():
+        v = int(v)
+    texto = str(v).strip()
+    numero_excel = re.fullmatch(r"(\d+)\.0+", texto)  # "30123456.0": número de Excel leído como texto
+    if numero_excel:
+        texto = numero_excel.group(1)
+    return re.sub(r"[\s.-]", "", texto) or None
+
+
+def limpiar_texto_opcional(v: Any) -> Optional[str]:
+    if v is None:
+        return None
+    texto = re.sub(r"\s+", " ", str(v)).strip()
+    return texto or None
+
+
 class LoginRequest(BaseModel):
     username: constr(strip_whitespace=True, min_length=3)
     password: constr(strip_whitespace=True, min_length=6)
@@ -134,17 +154,16 @@ class LoginResponse(BaseModel):
 class PersonaCreate(BaseModel):
     nombre: constr(strip_whitespace=True, min_length=2)
     apellido: constr(strip_whitespace=True, min_length=2)
-    dni: constr(pattern=DNI_REGEX)
+    # Opcional: si no se sabe, queda vacío y se puede completar después.
+    dni: Optional[constr(pattern=DNI_REGEX)] = None
     fecha_nacimiento: Optional[date] = None
     genero: Optional[str] = Field(default=None, description="'V' (varón), 'M' (mujer) o 'No binario'")
     situacion_de_calle: bool = False
 
     @field_validator("dni", mode="before")
     @classmethod
-    def clean_dni(cls, v: Any) -> str:
-        if isinstance(v, str):
-            return re.sub(r"[\s.-]", "", v.strip())
-        return str(v) if v is not None else ""
+    def clean_dni(cls, v: Any) -> Optional[str]:
+        return limpiar_dni_opcional(v)
 
     @field_validator("fecha_nacimiento", mode="before")
     @classmethod
@@ -156,8 +175,15 @@ class PersonaCreate(BaseModel):
     def clean_genero(cls, v: Any) -> Optional[str]:
         return normalize_genero(v, strict=True)
 
-class PersonaRead(PersonaCreate):
+class PersonaRead(BaseModel):
+    # Sin las restricciones de PersonaCreate: al leer de la base se muestra lo que haya.
     id: int
+    nombre: str
+    apellido: str
+    dni: Optional[str] = None
+    fecha_nacimiento: Optional[date] = None
+    genero: Optional[str] = None
+    situacion_de_calle: bool = False
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -172,33 +198,21 @@ class PersonaListItem(PersonaRead):
     total_signos: int = 0
     total_kits: int = 0
 
-class PersonaBulkRow(BaseModel):
-    nombre: Optional[constr(strip_whitespace=True, min_length=1)] = None
-    apellido: Optional[constr(strip_whitespace=True, min_length=1)] = None
+
+class PersonaUpdate(BaseModel):
+    """Edición a mano de una persona. Solo se cambian los campos que vienen en el pedido;
+    mandar dni o fecha_nacimiento en null (o vacío) los deja en blanco."""
+    nombre: Optional[constr(strip_whitespace=True, min_length=2)] = None
+    apellido: Optional[constr(strip_whitespace=True, min_length=2)] = None
     dni: Optional[constr(pattern=DNI_REGEX)] = None
     fecha_nacimiento: Optional[date] = None
     genero: Optional[str] = None
-    situacion_de_calle: bool = False
-
-    @field_validator("nombre", "apellido", mode="before")
-    @classmethod
-    def clean_nombre_apellido(cls, v: Any) -> Optional[str]:
-        if v is None:
-            return None
-        if isinstance(v, str):
-            val = v.strip()
-            return val if val else None
-        return str(v)
+    situacion_de_calle: Optional[bool] = None
 
     @field_validator("dni", mode="before")
     @classmethod
     def clean_dni(cls, v: Any) -> Optional[str]:
-        if v is None or v == "":
-            return None
-        if isinstance(v, str):
-            value = re.sub(r"[\s.-]", "", v.strip())
-            return value if value else None
-        return str(v) if v is not None else None
+        return limpiar_dni_opcional(v)
 
     @field_validator("fecha_nacimiento", mode="before")
     @classmethod
@@ -209,6 +223,87 @@ class PersonaBulkRow(BaseModel):
     @classmethod
     def clean_genero(cls, v: Any) -> Optional[str]:
         return normalize_genero(v, strict=True)
+
+
+class ActualizacionPersona(BaseModel):
+    """Dato a completar/actualizar que se confirmó en la revisión de una carga masiva."""
+    persona_id: int
+    dni: Optional[constr(pattern=DNI_REGEX)] = None
+    fecha_nacimiento: Optional[date] = None
+
+    @field_validator("dni", mode="before")
+    @classmethod
+    def clean_dni(cls, v: Any) -> Optional[str]:
+        return limpiar_dni_opcional(v)
+
+    @field_validator("fecha_nacimiento", mode="before")
+    @classmethod
+    def clean_fecha(cls, v: Any) -> Any:
+        return _normalize_date_value(v)
+
+
+class ActualizacionesRequest(BaseModel):
+    cambios: list[ActualizacionPersona]
+
+
+class ActualizacionesResponse(BaseModel):
+    ok: int
+    errores: list[str]
+
+
+class DatosPersonaFila(BaseModel):
+    """Columnas de persona de cualquier planilla: Nombre, Apellido, DNI y Fecha de nacimiento.
+    Cualquiera puede venir en blanco (pero no todas a la vez)."""
+    nombre: Optional[str] = None
+    apellido: Optional[str] = None
+    dni: Optional[constr(pattern=DNI_REGEX)] = None
+    fecha_nacimiento: Optional[date] = None
+
+    @field_validator("nombre", "apellido", mode="before")
+    @classmethod
+    def clean_texto(cls, v: Any) -> Optional[str]:
+        return limpiar_texto_opcional(v)
+
+    @field_validator("dni", mode="before")
+    @classmethod
+    def clean_dni(cls, v: Any) -> Optional[str]:
+        return limpiar_dni_opcional(v)
+
+    @field_validator("fecha_nacimiento", mode="before")
+    @classmethod
+    def clean_fecha_nacimiento(cls, v: Any) -> Any:
+        return _normalize_date_value(v)
+
+    def tiene_datos_persona(self) -> bool:
+        return bool(self.dni or self.nombre or self.apellido)
+
+    @property
+    def etiqueta(self) -> str:
+        """Texto para mostrar/agrupar: 'Juan Pérez · DNI 30123456', 'Juan Pérez' o 'DNI 30123456'."""
+        nombre = " ".join(p for p in (self.nombre, self.apellido) if p)
+        if nombre and self.dni:
+            return f"{nombre} · DNI {self.dni}"
+        return nombre or (f"DNI {self.dni}" if self.dni else "")
+
+class PersonaBulkRow(DatosPersonaFila):
+    """Fila de la planilla de personas (y de las altas confirmadas en una revisión)."""
+    fila: Optional[int] = None
+    genero: Optional[str] = None
+    situacion_de_calle: bool = False
+
+    @field_validator("genero", mode="before")
+    @classmethod
+    def clean_genero(cls, v: Any) -> Optional[str]:
+        return normalize_genero(v, strict=True)
+
+    @field_validator("situacion_de_calle", mode="before")
+    @classmethod
+    def clean_calle(cls, v: Any) -> bool:
+        if v is None or v == "":
+            return False
+        if isinstance(v, str):
+            return _strip_accents(v).strip().casefold() in ("true", "1", "si", "s", "yes", "y", "x")
+        return bool(v)
 
 class PersonaBulkRequest(BaseModel):
     # Las filas se reciben sin validar y se validan una por una en el endpoint,
@@ -221,7 +316,7 @@ class PersonaCreada(BaseModel):
     id: int
     nombre: str
     apellido: str
-    dni: str
+    dni: Optional[str] = None
 
 class PersonaBulkResponse(BaseModel):
     ok: int
@@ -243,7 +338,9 @@ class OperativoRead(OperativoUpdate):
     model_config = {"from_attributes": True}
 
 class SignosCreate(BaseModel):
-    dni: constr(pattern=DNI_REGEX)
+    # La persona se indica por id (puede no tener DNI). Se acepta dni por compatibilidad.
+    persona_id: Optional[int] = None
+    dni: Optional[constr(pattern=DNI_REGEX)] = None
     presion_arterial: Optional[constr(pattern=PRESION_REGEX)] = None
     frecuencia_cardiaca: Optional[conint(ge=30, le=220)] = None
     oxigenacion_sangre: Optional[confloat(ge=70.0, le=100.0)] = None
@@ -253,10 +350,14 @@ class SignosCreate(BaseModel):
 
     @field_validator("dni", mode="before")
     @classmethod
-    def clean_dni(cls, v: Any) -> str:
-        if isinstance(v, str):
-            return re.sub(r"[\s.-]", "", v.strip())
-        return str(v) if v is not None else ""
+    def clean_dni(cls, v: Any) -> Optional[str]:
+        return limpiar_dni_opcional(v)
+
+    @model_validator(mode="after")
+    def requiere_persona(self):
+        if self.persona_id is None and not self.dni:
+            raise ValueError("Falta indicar la persona (persona_id)")
+        return self
 
     @field_validator("fecha", mode="before")
     @classmethod
@@ -299,13 +400,12 @@ class SignosRead(BaseModel):
 
     model_config = {"from_attributes": True}
 
-class SignosBulkRow(BaseModel):
-    # Si viene persona_id (ya resuelto en la revisión previa), se usa directo y no se busca por identificador.
+class SignosBulkRow(DatosPersonaFila):
+    # Si viene persona_id (ya resuelto en la revisión previa), se usa directo y no se busca
+    # por nombre/apellido/DNI.
     persona_id: Optional[int] = None
     # Número de fila original del archivo, para que los errores coincidan con el Excel.
     fila: Optional[int] = None
-    identificador: Optional[str] = None
-    dni: Optional[constr(pattern=DNI_REGEX)] = None
     signos: constr(strip_whitespace=True, min_length=1)
     fecha: date
     operativo_id: Optional[int] = None
@@ -317,15 +417,10 @@ class SignosBulkRow(BaseModel):
         return _normalize_date_value(v)
 
     @model_validator(mode="after")
-    def ensure_identificador(cls, values):
-        identificador = values.identificador or values.dni
-        if values.persona_id is not None and (not identificador or not identificador.strip()):
-            values.identificador = f"persona #{values.persona_id}"
-            return values
-        if not identificador or not identificador.strip():
-            raise ValueError("Debe proporcionar DNI o Nombre y Apellido en la primera columna.")
-        values.identificador = identificador.strip()
-        return values
+    def requiere_persona(self):
+        if self.persona_id is None and not self.tiene_datos_persona():
+            raise ValueError("falta la persona: completar Nombre y Apellido, DNI o ambos")
+        return self
 
 class SignosBulkRequest(BaseModel):
     # Ver comentario en PersonaBulkRequest: validación por fila en el endpoint.
@@ -338,15 +433,20 @@ class SignosBulkResponse(BaseModel):
     errores: list[str]
 
 class KitCreate(BaseModel):
-    dni: constr(pattern=DNI_REGEX)
+    persona_id: Optional[int] = None
+    dni: Optional[constr(pattern=DNI_REGEX)] = None
     tipo: constr(strip_whitespace=True, min_length=1)
 
     @field_validator("dni", mode="before")
     @classmethod
-    def clean_dni(cls, v: Any) -> str:
-        if isinstance(v, str):
-            return re.sub(r"[\s.-]", "", v.strip())
-        return str(v) if v is not None else ""
+    def clean_dni(cls, v: Any) -> Optional[str]:
+        return limpiar_dni_opcional(v)
+
+    @model_validator(mode="after")
+    def requiere_persona(self):
+        if self.persona_id is None and not self.dni:
+            raise ValueError("Falta indicar la persona (persona_id)")
+        return self
 
     @field_validator("tipo")
     @classmethod
@@ -369,7 +469,7 @@ class PersonaShortRead(BaseModel):
     id: int
     nombre: str
     apellido: str
-    dni: str
+    dni: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
@@ -394,17 +494,26 @@ class PersonaCandidata(BaseModel):
     id: int
     nombre: str
     apellido: str
-    dni: str
+    dni: Optional[str] = None
+    fecha_nacimiento: Optional[date] = None
     similitud: float
 
 class IdentificadorRevision(BaseModel):
+    # Texto que identifica al grupo de filas (ej. "Juan Pérez · DNI 30123456"); es la clave
+    # con la que el frontend arma las decisiones.
     identificador: str
     filas: list[int]
     # "exacta": coincide con una sola persona -> se carga directo.
     # "sugerencia": no coincide exacto, pero hay personas parecidas -> hay que confirmar.
     # "ambigua": coincide exacto con más de una persona -> hay que elegir.
+    # "conflicto_dni": el DNI de la planilla es de alguien con otro nombre -> hay que confirmar.
     # "no_encontrada": no hay nadie parecido -> se puede crear la persona.
     estado: str
+    # Lo que dice la planilla (para completar/actualizar datos de la persona elegida).
+    dni: Optional[str] = None
+    fecha_nacimiento: Optional[date] = None
+    # Si el DNI de la planilla ya lo tiene alguien en la base: su id (no se puede asignar a otro).
+    dni_en_uso_por: Optional[int] = None
     persona: Optional[PersonaCandidata] = None
     candidatos: list[PersonaCandidata] = []
     nombre_sugerido: str = ""
@@ -445,10 +554,9 @@ def normalize_tipo_kit(value: Any) -> Optional[str]:
     raise ValueError("tipo de kit inválido: usar PPAAS o ABRIGO")
 
 
-class KitBulkRow(BaseModel):
+class KitBulkRow(DatosPersonaFila):
     persona_id: Optional[int] = None
     fila: Optional[int] = None
-    identificador: Optional[str] = None
     tipo: str
     fecha: date
 
@@ -463,14 +571,10 @@ class KitBulkRow(BaseModel):
         return _normalize_date_value(v)
 
     @model_validator(mode="after")
-    def ensure_identificador(cls, values):
-        if values.persona_id is not None:
-            values.identificador = (values.identificador or "").strip() or f"persona #{values.persona_id}"
-            return values
-        if not values.identificador or not str(values.identificador).strip():
-            raise ValueError("Debe proporcionar DNI o Nombre y Apellido en la primera columna.")
-        values.identificador = str(values.identificador).strip()
-        return values
+    def requiere_persona(self):
+        if self.persona_id is None and not self.tiene_datos_persona():
+            raise ValueError("falta la persona: completar Nombre y Apellido, DNI o ambos")
+        return self
 
 
 class KitBulkRequest(BaseModel):

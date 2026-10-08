@@ -29,10 +29,10 @@ def test_preview_kits_usa_la_misma_revision():
             await seed(session)
             res = await revisar_kits_bulk(
                 KitBulkRequest(rows=[
-                    {"fila": 2, "identificador": "Pamela Morales", "tipo": "abrigo", "fecha": "2026-06-04"},
-                    {"fila": 3, "identificador": "Zulma Sanchez", "tipo": "Kit PPAAS", "fecha": "04/06/2026"},
-                    {"fila": 4, "identificador": "Marcelo Tercero", "tipo": "PPAAS", "fecha": "2026-06-04"},
-                    {"fila": 5, "identificador": "32931637", "tipo": "zapatillas", "fecha": "2026-06-04"},
+                    {"fila": 2, "nombre": "Pamela", "apellido": "Morales", "tipo": "abrigo", "fecha": "2026-06-04"},
+                    {"fila": 3, "nombre": "Zulma", "apellido": "Sanchez", "tipo": "Kit PPAAS", "fecha": "04/06/2026"},
+                    {"fila": 4, "nombre": "Marcelo", "apellido": "Tercero", "tipo": "PPAAS", "fecha": "2026-06-04"},
+                    {"fila": 5, "dni": "32931637", "tipo": "zapatillas", "fecha": "2026-06-04"},
                 ]),
                 user=USER,
                 db=session,
@@ -51,9 +51,9 @@ def test_carga_kits_con_persona_id_y_duplicados():
             await seed(session)
             sulma = (await session.execute(select(Persona).where(Persona.dni == "65567713"))).scalar_one()
             filas = [
-                {"fila": 2, "identificador": "Pamela Morales", "tipo": "ABRIGO", "fecha": "2026-06-04"},
-                {"fila": 3, "identificador": "Zulma Sanchez", "tipo": "PPAAS", "fecha": "2026-06-04", "persona_id": sulma.id},
-                {"fila": 4, "identificador": "Pamela Morales", "tipo": "ABRIGO", "fecha": "2026-06-04"},
+                {"fila": 2, "nombre": "Pamela", "apellido": "Morales", "tipo": "ABRIGO", "fecha": "2026-06-04"},
+                {"fila": 3, "nombre": "Zulma", "apellido": "Sanchez", "tipo": "PPAAS", "fecha": "2026-06-04", "persona_id": sulma.id},
+                {"fila": 4, "nombre": "Pamela", "apellido": "Morales", "tipo": "ABRIGO", "fecha": "2026-06-04"},
             ]
             res = await cargar_kits_bulk(KitBulkRequest(rows=filas), user=USER, db=session)
             assert res["ok"] == 2

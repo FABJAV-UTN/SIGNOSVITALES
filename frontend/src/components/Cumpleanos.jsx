@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import useCumpleanos from "./useCumpleanos";
 import { textoDias } from "../utils/cumpleanos";
+import { textoDni } from "../utils/persona";
 
 const formatoFecha = new Intl.DateTimeFormat("es-AR", { weekday: "long", day: "numeric", month: "long" });
 
@@ -46,7 +47,7 @@ export default function Cumpleanos() {
                       <strong>
                         {persona.nombre} {persona.apellido}
                       </strong>
-                      <span className="text-muted small">DNI {persona.dni}</span>
+                      <span className="text-muted small">{textoDni(persona)}</span>
                     </div>
                     <div className="cumple-fecha">
                       <span className="cumple-dias">{textoDias(cumple.dias)}</span>

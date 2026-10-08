@@ -295,7 +295,7 @@ export default function HistorialKits() {
                     <td style={{ padding: "0.75rem" }}>
                       {item.persona.nombre} {item.persona.apellido}
                     </td>
-                    <td style={{ padding: "0.75rem" }}>{item.persona.dni}</td>
+                    <td style={{ padding: "0.75rem" }}>{item.persona.dni || "—"}</td>
                     <td style={{ padding: "0.75rem" }}>
                       {item.persona.situacion_de_calle ? (
                         <span style={{ color: "#b91c1c", fontWeight: "bold" }}>Sí</span>

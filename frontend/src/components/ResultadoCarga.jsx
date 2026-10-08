@@ -1,4 +1,6 @@
-/** Resultado de una carga masiva (signos o kits) después de la revisión. */
+import { textoDni } from "../utils/persona";
+
+/** Resultado de una carga masiva (personas, signos o kits) después de la revisión. */
 export default function ResultadoCarga({ resultado, unidad = "fila(s) guardada(s)" }) {
   if (!resultado) return null;
   return (
@@ -10,14 +12,14 @@ export default function ResultadoCarga({ resultado, unidad = "fila(s) guardada(s
         </strong>
         {resultado.omitidas > 0 && <> · Filas no cargadas por decisión tuya: {resultado.omitidas}</>}
       </p>
+      {resultado.actualizadas > 0 && <p>Personas con DNI o fecha de nacimiento completados/actualizados: {resultado.actualizadas}</p>}
       {resultado.creadas.length > 0 && (
         <div>
           <p>Personas creadas ({resultado.creadas.length}):</p>
           <ul>
             {resultado.creadas.map((p) => (
               <li key={p.id}>
-                {p.nombre} {p.apellido} — DNI {p.dni}
-                {p.provisorio ? " (sin DNI en la planilla: se asignó uno provisorio)" : ""}
+                {p.nombre} {p.apellido} — {textoDni(p)}
               </li>
             ))}
           </ul>

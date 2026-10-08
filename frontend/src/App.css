@@ -1113,3 +1113,21 @@ td.num {
   font-size: 0.75rem;
   align-self: center;
 }
+
+/* Edición a mano de la ficha de persona */
+.persona-editar {
+  display: grid;
+  gap: 0.6rem;
+  margin: 0.75rem 0;
+}
+
+.input-con-boton {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.input-con-boton input {
+  flex: 1;
+  min-width: 0;
+}

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import api from "../api";
 import PersonaPanel from "./PersonaPanel";
+import { textoDni } from "../utils/persona";
 
 function Contador({ valor }) {
   return <span className={`count-badge ${valor > 0 ? "" : "count-zero"}`}>{valor}</span>;
@@ -114,11 +115,11 @@ export default function BuscarPersona() {
                         <span className="mobile-only">
                           {" "}
                           {persona.apellido}
-                          <span className="text-muted small block">DNI {persona.dni}</span>
+                          <span className="text-muted small block">{textoDni(persona)}</span>
                         </span>
                       </td>
                       <td className="desktop-only">{persona.apellido}</td>
-                      <td className="desktop-only">{persona.dni}</td>
+                      <td className="desktop-only">{persona.dni || <span className="text-muted">Sin DNI</span>}</td>
                       <td className="desktop-only">{persona.genero || "-"}</td>
                       <td className="num">
                         <Contador valor={persona.total_signos ?? 0} />
@@ -137,7 +138,15 @@ export default function BuscarPersona() {
         <aside className="split-side" ref={panelRef}>
           {seleccionada ? (
             <div className="card sticky-card">
-              <PersonaPanel key={seleccionada.id} persona={seleccionada} onClose={() => setSeleccionada(null)} />
+              <PersonaPanel
+                key={seleccionada.id}
+                persona={seleccionada}
+                onClose={() => setSeleccionada(null)}
+                onActualizada={(p) => {
+                  setSeleccionada(p);
+                  setResultados((lista) => lista.map((x) => (x.id === p.id ? p : x)));
+                }}
+              />
             </div>
           ) : (
             <div className="card sticky-card empty-panel">

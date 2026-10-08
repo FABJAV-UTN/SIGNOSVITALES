@@ -90,7 +90,9 @@ function TablaRegistros({ registros, mostrarPersona }) {
 
 export default function Historial() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const dniParam = searchParams.get("dni") || searchParams.get("q") || "";
+  // La persona activa sale de la URL (?persona=<id>), así funciona el link desde "Buscar persona"
+  // y el botón "atrás" del navegador.
+  const personaParam = Number(searchParams.get("persona")) || null;
 
   const [personaCargada, setPersonaCargada] = useState(null);
   const [errorPersona, setErrorPersona] = useState("");
@@ -99,29 +101,26 @@ export default function Historial() {
   const [resultado, setResultado] = useState({ key: null, registros: [], error: "" });
   const [tab, setTab] = useState("signos");
 
-  // La persona activa sale de la URL (?dni=...), así funciona el link desde "Buscar persona"
-  // y el botón "atrás" del navegador.
-  const persona = dniParam && personaCargada?.dni === dniParam ? personaCargada : null;
-  const esperandoPersona = Boolean(dniParam) && !persona && !errorPersona;
+  const persona = personaParam && personaCargada?.id === personaParam ? personaCargada : null;
+  const esperandoPersona = Boolean(personaParam) && !persona && !errorPersona;
 
   useEffect(() => {
-    if (!dniParam || personaCargada?.dni === dniParam) return undefined;
+    if (!personaParam || personaCargada?.id === personaParam) return undefined;
     let cancelado = false;
     api
-      .get("/personas", { params: { q: dniParam, limit: 20 } })
+      .get(`/personas/${personaParam}`)
       .then((res) => {
         if (cancelado) return;
-        const encontrada = res.data.find((p) => p.dni === dniParam) || null;
-        setPersonaCargada(encontrada);
-        setErrorPersona(encontrada ? "" : `No se encontró una persona con DNI ${dniParam}.`);
+        setPersonaCargada(res.data);
+        setErrorPersona("");
       })
-      .catch(() => !cancelado && setErrorPersona("No se pudo cargar la persona."));
+      .catch(() => !cancelado && setErrorPersona("No se encontró la persona."));
     return () => {
       cancelado = true;
     };
-  }, [dniParam, personaCargada?.dni]);
+  }, [personaParam, personaCargada?.id]);
 
-  const requestKey = JSON.stringify({ dni: persona?.dni || null, desde, hasta });
+  const requestKey = JSON.stringify({ persona: persona?.id || null, desde, hasta });
   const loading = resultado.key !== requestKey;
   const registros = resultado.registros;
   const error = errorPersona || resultado.error;
@@ -130,16 +129,14 @@ export default function Historial() {
     if (esperandoPersona) return undefined; // todavía cargando la persona del link
     let cancelado = false;
     const params = {};
-    if (persona) params.q = persona.dni;
+    if (persona) params.persona_id = persona.id;
     if (desde) params.desde = desde;
     if (hasta) params.hasta = hasta;
     api
       .get("/signos/historial", { params })
       .then((response) => {
         if (cancelado) return;
-        // El filtro q del backend también busca por nombre: nos quedamos solo con esta persona.
-        const data = persona ? response.data.filter((r) => r.persona?.dni === persona.dni) : response.data;
-        setResultado({ key: requestKey, registros: data, error: "" });
+        setResultado({ key: requestKey, registros: response.data, error: "" });
       })
       .catch(() => {
         if (!cancelado) setResultado({ key: requestKey, registros: [], error: "No se pudo cargar el historial." });
@@ -153,7 +150,7 @@ export default function Historial() {
     setPersonaCargada(p);
     setErrorPersona("");
     setTab("signos");
-    setSearchParams({ dni: p.dni });
+    setSearchParams({ persona: String(p.id) });
   }
 
   function limpiarPersona() {
@@ -217,8 +214,9 @@ export default function Historial() {
             <aside className={`split-side tab-pane ${tab === "persona" ? "tab-active" : ""}`}>
               <div className="card sticky-card">
                 <PersonaPanel
-                  key={persona.dni}
+                  key={persona.id}
                   persona={persona}
+                  onActualizada={setPersonaCargada}
                   onClose={limpiarPersona}
                   mostrarVerHistorial={false}
                   totalSignos={hayFiltroFecha ? persona.total_signos : registros.length}

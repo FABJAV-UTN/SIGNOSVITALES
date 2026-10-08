@@ -87,3 +87,15 @@ def candidatos(identificador: str, personas: list[Persona]) -> list[tuple[Person
     puntajes = [item for item in puntajes if item[1] >= UMBRAL_SUGERENCIA]
     puntajes.sort(key=lambda item: item[1], reverse=True)
     return puntajes[:MAX_CANDIDATOS]
+
+
+def texto_nombre(nombre: str | None, apellido: str | None) -> str:
+    return " ".join(p for p in (nombre, apellido) if p and p.strip())
+
+
+def coincide_exacto(nombre: str | None, apellido: str | None, persona: Persona) -> bool:
+    """Nombre y apellido iguales (sin importar mayúsculas ni tildes). Con columnas separadas
+    no hace falta adivinar cuál palabra es el apellido."""
+    if not nombre or not apellido:
+        return False
+    return normalizar(persona.nombre) == normalizar(nombre) and normalizar(persona.apellido) == normalizar(apellido)

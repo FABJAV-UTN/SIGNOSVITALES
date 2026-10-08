@@ -28,7 +28,7 @@ export default function RegistrarPersona() {
       await api.post("/personas", {
         nombre: nombre.trim(),
         apellido: apellido.trim(),
-        dni: dni.trim(),
+        dni: dni.trim() || null,
         fecha_nacimiento: fecha_nacimiento || null,
         genero: genero || null,
         situacion_de_calle: situacionDeCalle,
@@ -64,7 +64,7 @@ export default function RegistrarPersona() {
           </label>
           <label>
             DNI
-            <input value={dni} onChange={(e) => setDni(e.target.value)} required placeholder="12345678" />
+            <input value={dni} onChange={(e) => setDni(e.target.value)} placeholder="Opcional: si no lo sabés, dejalo vacío" inputMode="numeric" />
           </label>
           <label>
             Fecha de nacimiento

@@ -17,7 +17,7 @@ Tablas:
 
 | Tabla | Qué guarda |
 |---|---|
-| `personas` | Beneficiarios (nombre, apellido, DNI único, fecha de nacimiento, género `V`/`M`/`No binario`, situación de calle) |
+| `personas` | Beneficiarios (nombre, apellido, DNI opcional y único, fecha de nacimiento, género `V`/`M`/`No binario`, situación de calle) |
 | `registro_signos_vitales` | Cada toma de signos: `persona_id`, `operativo_id`, fecha, hora, presión, FC, SpO₂ |
 | `kits` | Cada entrega: `persona_id`, tipo (`PPAAS` / `ABRIGO`), fecha de entrega |
 | `operativos` | Lugar, día y hora del operativo; uno solo con `activo = 1` |
@@ -133,8 +133,8 @@ FROM kits k JOIN personas p ON p.id = k.persona_id
 WHERE p.dni = '12345678'
 ORDER BY k.fecha_entrega DESC;
 
--- Personas con DNI provisorio (creadas sin DNI desde una carga masiva)
-SELECT id, nombre, apellido, dni FROM personas WHERE dni LIKE '9%' AND LENGTH(dni) = 8;
+-- Personas sin DNI
+SELECT id, nombre, apellido FROM personas WHERE dni IS NULL ORDER BY apellido, nombre;
 
 -- Personas sin ninguna atención (ni signos ni kits)
 SELECT p.id, p.nombre, p.apellido, p.dni
@@ -189,8 +189,8 @@ DELETE FROM registro_signos_vitales WHERE fecha = '2026-09-10';
 ## 6. Corregir datos
 
 ```sql
--- Completar el DNI real de alguien que tenía uno provisorio
-UPDATE personas SET dni = '30123456' WHERE dni = '90000001';
+-- Completar el DNI de alguien que no lo tenía (también se puede desde "Editar datos" en la ficha)
+UPDATE personas SET dni = '30123456' WHERE id = 9;
 
 -- Corregir nombre o apellido
 UPDATE personas SET nombre = 'Sulma', apellido = 'Sánchez' WHERE id = 9;

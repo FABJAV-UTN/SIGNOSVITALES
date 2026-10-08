@@ -2,31 +2,27 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import api from "../api";
 import PersonaAutocomplete from "./PersonaAutocomplete";
+import { textoDni } from "../utils/persona";
 
 /**
  * Elegir a la persona para un formulario individual (entregar kit, registrar signos):
  * buscador con sugerencias por DNI, nombre o apellido. Una vez elegida muestra una ficha
- * corta con "Cambiar". Si se llega con un DNI (desde "Buscar persona"), la carga sola.
+ * corta con "Cambiar". Si se llega con una persona (desde "Buscar persona"), la carga sola.
  */
-export default function PersonaSelector({ persona, onChange, dniInicial = "", children }) {
+export default function PersonaSelector({ persona, onChange, personaIdInicial = null, children }) {
   const [errorInicial, setErrorInicial] = useState("");
 
   useEffect(() => {
-    if (!dniInicial || persona) return undefined;
+    if (!personaIdInicial || persona) return undefined;
     let cancelado = false;
     api
-      .get("/personas", { params: { q: dniInicial, limit: 20 } })
-      .then((res) => {
-        if (cancelado) return;
-        const encontrada = res.data.find((p) => p.dni === dniInicial);
-        if (encontrada) onChange(encontrada);
-        else setErrorInicial(`No se encontró una persona con DNI ${dniInicial}.`);
-      })
+      .get(`/personas/${personaIdInicial}`)
+      .then((res) => !cancelado && onChange(res.data))
       .catch(() => !cancelado && setErrorInicial("No se pudo cargar la persona."));
     return () => {
       cancelado = true;
     };
-  }, [dniInicial]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [personaIdInicial]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (persona) {
     return (
@@ -36,7 +32,7 @@ export default function PersonaSelector({ persona, onChange, dniInicial = "", ch
             {persona.nombre} {persona.apellido}
           </strong>
           <div className="text-muted small">
-            DNI {persona.dni}
+            {textoDni(persona)}
             {persona.total_signos !== undefined && ` · ${persona.total_signos} signos · ${persona.total_kits} kits`}
             {persona.situacion_de_calle ? " · En situación de calle" : ""}
           </div>

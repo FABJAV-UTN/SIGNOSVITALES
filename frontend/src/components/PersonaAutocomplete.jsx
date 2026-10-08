@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import api from "../api";
+import { textoDni } from "../utils/persona";
 
 /**
  * Buscador con sugerencias: mientras se escribe muestra las personas que coinciden
@@ -118,7 +119,7 @@ export default function PersonaAutocomplete({ onSelect, placeholder = "DNI, nomb
                   {p.nombre} {p.apellido}
                 </span>
                 <span className="ac-meta">
-                  DNI {p.dni} · {p.total_signos ?? 0} signos · {p.total_kits ?? 0} kits
+                  {textoDni(p)} · {p.total_signos ?? 0} signos · {p.total_kits ?? 0} kits
                 </span>
               </li>
             ))

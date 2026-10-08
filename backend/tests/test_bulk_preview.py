@@ -27,8 +27,10 @@ async def seed(session):
     await session.commit()
 
 
-def fila(identificador, n, fecha="2026-09-10"):
-    return {"identificador": identificador, "signos": "120/80-75-97", "fecha": fecha, "fila": n}
+def fila(nombre_completo, n, fecha="2026-09-10", dni=None):
+    partes = nombre_completo.split()
+    nombre, apellido = (" ".join(partes[:-1]), partes[-1]) if len(partes) > 1 else (nombre_completo, None)
+    return {"nombre": nombre, "apellido": apellido, "dni": dni, "signos": "120/80-75-97", "fecha": fecha, "fila": n}
 
 
 def test_preview_clasifica_exactas_sugerencias_y_no_encontradas():
@@ -44,7 +46,7 @@ def test_preview_clasifica_exactas_sugerencias_y_no_encontradas():
                     fila("Xiomara", 5),
                     fila("Marcelo Tercero", 6),
                     fila("Marelo Tercero", 7),
-                    {"identificador": "Josue", "signos": "", "fecha": "2026-13-45", "fila": 8},
+                    {"nombre": "Josue", "signos": "", "fecha": "2026-13-45", "fila": 8},
                 ]),
                 user=USER,
                 db=session,
@@ -76,7 +78,7 @@ def test_carga_con_persona_id_confirmado_y_persona_creada():
             )
             assert creadas["ok"] == 1
             marcelo = creadas["creadas"][0]
-            assert marcelo["dni"].startswith("9")
+            assert marcelo["dni"] is None
 
             res = await cargar_signos_bulk(
                 SignosBulkRequest(rows=[
@@ -97,13 +99,13 @@ def test_carga_con_persona_id_confirmado_y_persona_creada():
     asyncio.run(_run())
 
 
-def test_dni_provisorio_no_se_repite_entre_cargas():
+def test_personas_sin_dni_no_chocan_entre_cargas():
     async def _run():
         async with AsyncSessionLocal() as session:
             await seed(session)
             a = await cargar_personas_bulk(PersonaBulkRequest(rows=[{"nombre": "Ana", "apellido": "Uno", "dni": ""}]), db=session)
             b = await cargar_personas_bulk(PersonaBulkRequest(rows=[{"nombre": "Beto", "apellido": "Dos", "dni": ""}]), db=session)
             assert a["ok"] == 1 and b["ok"] == 1, (a, b)
-            assert a["creadas"][0]["dni"] != b["creadas"][0]["dni"]
+            assert a["creadas"][0]["dni"] is None and b["creadas"][0]["dni"] is None
 
     asyncio.run(_run())
