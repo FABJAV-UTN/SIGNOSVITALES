@@ -9,6 +9,7 @@ import {
   mapearColumnas,
   numeroFila,
   verificarColumnas,
+  verificarTipoPlanilla,
 } from "../utils/planillaPersona";
 import ResultadoCarga from "./ResultadoCarga";
 import RevisionCarga from "./RevisionCarga";
@@ -58,6 +59,7 @@ function descargarPlanillaModelo() {
 function procesarPlanilla(rawRows, { date1904 }) {
   const filteredRows = filasConDatos(rawRows);
   const encabezados = Object.keys(rawRows[0]);
+  verificarTipoPlanilla(encabezados, "personas");
   const keyMap = mapearColumnas(encabezados, ALIAS_PERSONAS);
   verificarColumnas(keyMap, encabezados);
 

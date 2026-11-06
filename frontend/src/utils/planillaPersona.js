@@ -60,6 +60,23 @@ export function verificarColumnas(keyMap, encabezados, requeridasExtra = []) {
   );
 }
 
+/**
+ * Si el archivo es de otro tipo de carga (ej. una planilla de kits subida en signos),
+ * lanza un error que dice en qué pantalla va. `propio`: "signos" | "kits" | "personas".
+ */
+export function verificarTipoPlanilla(encabezados, propio) {
+  const h = new Set(encabezados.map(normalizeHeader));
+  const esSignos = ["presion arterial", "presion", "frecuencia cardiaca", "fc", "oxigenacion", "spo2", "saturacion"].some((c) => h.has(c));
+  const esKits = ["tipo", "tipo kit", "tipo de kit", "kit"].some((c) => h.has(c));
+  const pantalla = { signos: "Carga masiva de signos", kits: "Carga masiva de kits" };
+  if (propio !== "signos" && esSignos && !esKits) {
+    throw new Error(`es una planilla de signos vitales: cargala en "${pantalla.signos}".`);
+  }
+  if (propio !== "kits" && esKits && !esSignos) {
+    throw new Error(`es una planilla de kits: cargala en "${pantalla.kits}".`);
+  }
+}
+
 const texto = (valor) => {
   if (valor === null || valor === undefined) return "";
   if (typeof valor === "number" && Number.isFinite(valor)) return String(valor);

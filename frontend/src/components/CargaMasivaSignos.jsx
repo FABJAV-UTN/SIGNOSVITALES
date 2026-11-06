@@ -13,6 +13,7 @@ import {
   mapearColumnas,
   numeroFila,
   verificarColumnas,
+  verificarTipoPlanilla,
 } from "../utils/planillaPersona";
 
 const ALIAS_SIGNOS = {
@@ -97,6 +98,7 @@ function procesarPlanilla(rawRows, { date1904 }) {
   // el formato de fecha de la planilla (dd/mm, mm/dd, etc.) no afecte el resultado.
   const filteredRows = filasConDatos(rawRows);
   const encabezados = Object.keys(rawRows[0]);
+  verificarTipoPlanilla(encabezados, "signos");
   const keyMap = mapearColumnas(encabezados, ALIAS_SIGNOS);
   verificarColumnas(keyMap, encabezados, ["fecha", "presion_arterial", "frecuencia_cardiaca", "oxigenacion_sangre"]);
 
