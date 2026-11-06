@@ -5,6 +5,7 @@ import api from "../api";
 import PersonaAutocomplete from "./PersonaAutocomplete";
 import PersonaPanel from "./PersonaPanel";
 import ExportarPdfButton from "./ExportarPdfButton";
+import ConteoBeneficiarios from "./ConteoBeneficiarios";
 
 function SignosChart({ registros }) {
   const datos = useMemo(
@@ -88,6 +89,19 @@ function TablaRegistros({ registros, mostrarPersona }) {
   );
 }
 
+const NOMBRES_MES = [
+  "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+  "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
+];
+
+/** "2026-04" -> { desde: "2026-04-01", hasta: "2026-04-30" } */
+function rangoDelMes(valor) {
+  const [anio, mes] = valor.split("-").map(Number);
+  const ultimoDia = new Date(anio, mes, 0).getDate(); // día 0 del mes siguiente = último de este
+  const mm = String(mes).padStart(2, "0");
+  return { desde: `${anio}-${mm}-01`, hasta: `${anio}-${mm}-${String(ultimoDia).padStart(2, "0")}` };
+}
+
 export default function Historial() {
   const [searchParams, setSearchParams] = useSearchParams();
   // La persona activa sale de la URL (?persona=<id>), así funciona el link desde "Buscar persona"
@@ -98,6 +112,10 @@ export default function Historial() {
   const [errorPersona, setErrorPersona] = useState("");
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
+  // Mes elegido ("01".."12") + año escrito a mano. Si hay mes, las fechas se completan solas y se bloquean.
+  const [mes, setMes] = useState("");
+  const [anio, setAnio] = useState(String(new Date().getFullYear()));
+  const [fechaInvalida, setFechaInvalida] = useState(false);
   const [resultado, setResultado] = useState({ key: null, registros: [], error: "" });
   const [tab, setTab] = useState("signos");
 
@@ -160,29 +178,70 @@ export default function Historial() {
 
   const hayFiltroFecha = Boolean(desde || hasta);
 
+  function aplicarMes(nuevoMes, nuevoAnio) {
+    setMes(nuevoMes);
+    setAnio(nuevoAnio);
+    setFechaInvalida(false);
+    if (!nuevoMes) {
+      setDesde("");
+      setHasta("");
+    } else if (/^\d{4}$/.test(nuevoAnio)) {
+      const rango = rangoDelMes(`${nuevoAnio}-${nuevoMes}`);
+      setDesde(rango.desde);
+      setHasta(rango.hasta);
+    }
+    // Año a medio escribir: se deja el rango anterior hasta que tenga 4 dígitos.
+  }
+
+  function cambiarFecha(e, setter) {
+    // Una fecha que no existe (ej. 31/04) llega vacía: avisamos en vez de filtrar mal.
+    setFechaInvalida(Boolean(e.target.validity?.badInput));
+    setter(e.target.value);
+  }
+
   const filtrosFecha = (
-    <div className="date-filters">
-      <label>
-        Desde
-        <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} />
-      </label>
-      <label>
-        Hasta
-        <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} />
-      </label>
-      {hayFiltroFecha && (
-        <button
-          type="button"
-          className="button button-outline button-small"
-          onClick={() => {
-            setDesde("");
-            setHasta("");
-          }}
-        >
-          Limpiar fechas
-        </button>
+    <>
+      <div className="date-filters">
+        <label>
+          Mes
+          <select value={mes} onChange={(e) => aplicarMes(e.target.value, anio)}>
+            <option value="">Rango libre</option>
+            {NOMBRES_MES.map((nombre, i) => (
+              <option key={nombre} value={String(i + 1).padStart(2, "0")}>
+                {nombre}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Año
+          <input
+            type="text"
+            inputMode="numeric"
+            maxLength={4}
+            className="input-anio"
+            value={anio}
+            onChange={(e) => aplicarMes(mes, e.target.value.replace(/\D/g, ""))}
+          />
+        </label>
+        <label>
+          Desde
+          <input type="date" value={desde} disabled={Boolean(mes)} onChange={(e) => cambiarFecha(e, setDesde)} />
+        </label>
+        <label>
+          Hasta
+          <input type="date" value={hasta} disabled={Boolean(mes)} onChange={(e) => cambiarFecha(e, setHasta)} />
+        </label>
+        {(hayFiltroFecha || mes) && (
+          <button type="button" className="button button-outline button-small" onClick={() => aplicarMes("", anio)}>
+            Limpiar fechas
+          </button>
+        )}
+      </div>
+      {fechaInvalida && (
+        <div className="alert alert-error">Esa fecha no existe (revisá el día: hay meses de 30 días). No se está filtrando por ella.</div>
       )}
-    </div>
+    </>
   );
 
   return (
@@ -254,6 +313,7 @@ export default function Historial() {
           </div>
           <p className="text-muted">Buscá una persona arriba para ver su ficha y el gráfico de sus signos.</p>
           {filtrosFecha}
+          <ConteoBeneficiarios desde={desde} hasta={hasta} />
           {registros.length === 0 ? (
             <p className="text-muted">No hay registros para mostrar.</p>
           ) : (
