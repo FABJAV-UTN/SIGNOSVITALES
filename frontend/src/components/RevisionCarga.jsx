@@ -1,9 +1,10 @@
 import { useMemo, useState } from "react";
 import api from "../api";
 import { GENEROS } from "../utils/genero";
+import { cantidadArchivos, describirFila, describirFilas, traducirErrores } from "../utils/cargaMultiple";
 import { fechaCorta, textoDni } from "../utils/persona";
 
-const listaFilas = (filas) => (filas.length === 1 ? `fila ${filas[0]}` : `filas ${filas.join(", ")}`);
+const mayuscula = (t) => t.charAt(0).toUpperCase() + t.slice(1);
 const cantFilas = (n) => `${n} ${n === 1 ? "fila" : "filas"}`;
 const nombrePlanilla = (r) => [r.nombre_sugerido, r.apellido_sugerido].filter(Boolean).join(" ");
 
@@ -54,8 +55,14 @@ function textoCambio(c) {
  * 2) ofrece completar/actualizar el DNI y la fecha de nacimiento de las personas que ya existen,
  * 3) lista a los que no están y deja tildar a quién crear,
  * 4) aplica los cambios, crea las personas y (si hay `endpoint`) manda las filas con la persona resuelta.
+ * `origenes` (opcional, carga de varios archivos): número de fila -> { archivo, fila } del Excel.
  */
-export default function RevisionCarga({ data, preview, endpoint, onCancelar, onTerminado }) {
+export default function RevisionCarga({ data, preview, endpoint, origenes = null, onCancelar, onTerminado }) {
+  const listaFilas = (filas) => describirFilas(filas, origenes);
+  const enVarias = (r) => {
+    const n = cantidadArchivos(r.filas, origenes);
+    return n > 1 ? <span className="chip chip-new chip-mini">en {n} planillas</span> : null;
+  };
   const aConfirmar = preview.identificadores.filter((r) => ["sugerencia", "ambigua", "conflicto_dni"].includes(r.estado));
   const exactas = preview.identificadores.filter((r) => r.estado === "exacta");
 
@@ -163,7 +170,7 @@ export default function RevisionCarga({ data, preview, endpoint, onCancelar, onT
   async function confirmar() {
     setError("");
     setEnviando(true);
-    const errores = preview.invalidas.map((f) => `Fila ${f.fila}: ${f.error}`);
+    const errores = preview.invalidas.map((f) => `${mayuscula(describirFila(f.fila, origenes))}: ${f.error}`);
     try {
       // 1) Completar / actualizar DNI y fecha de nacimiento de personas existentes.
       let actualizadas = 0;
@@ -236,7 +243,7 @@ export default function RevisionCarga({ data, preview, endpoint, onCancelar, onT
           errores.push(...(res.data.errores || []));
         }
       }
-      onTerminado({ ok, errores, creadas, omitidas, actualizadas });
+      onTerminado({ ok, errores: traducirErrores(errores, origenes), creadas, omitidas, actualizadas });
     } catch (err) {
       setError(detalleError(err, "No se pudo completar la carga."));
     } finally {
@@ -285,7 +292,8 @@ export default function RevisionCarga({ data, preview, endpoint, onCancelar, onT
                 <strong>“{r.identificador}”</strong>{" "}
                 <span className="text-muted">
                   · {cantFilas(r.filas.length)} ({listaFilas(r.filas)})
-                </span>
+                </span>{" "}
+                {enVarias(r)}
               </legend>
               <p className="match-question">{preguntaConfirmacion(r)}</p>
               {r.candidatos.map((c) => (
@@ -370,7 +378,7 @@ export default function RevisionCarga({ data, preview, endpoint, onCancelar, onT
           <ul className="no-encontradas-resumen">
             {noEncontradas.map((r) => (
               <li key={r.identificador}>
-                {r.identificador} <span className="text-muted">({cantFilas(r.filas.length)})</span>
+                {r.identificador} <span className="text-muted">({cantFilas(r.filas.length)})</span> {enVarias(r)}
               </li>
             ))}
           </ul>
@@ -402,7 +410,8 @@ export default function RevisionCarga({ data, preview, endpoint, onCancelar, onT
                     <strong>{r.identificador}</strong>{" "}
                     <span className="text-muted">
                       · {cantFilas(r.filas.length)} ({listaFilas(r.filas)})
-                    </span>
+                    </span>{" "}
+                    {enVarias(r)}
                   </span>
                 </label>
 
@@ -490,7 +499,7 @@ export default function RevisionCarga({ data, preview, endpoint, onCancelar, onT
           <ul>
             {preview.invalidas.map((f) => (
               <li key={f.fila}>
-                Fila {f.fila}: {f.error}
+                {mayuscula(describirFila(f.fila, origenes))}: {f.error}
               </li>
             ))}
           </ul>

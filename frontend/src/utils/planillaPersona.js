@@ -41,7 +41,16 @@ export function verificarColumnas(keyMap, encabezados, requeridasExtra = []) {
   const faltan = [...COLUMNAS_PERSONA, ...requeridasExtra].filter((c) => !keyMap[c]);
   if (faltan.length === 0) return;
   const viejo = encabezados.some((h) => normalizeHeader(h) === "identificador");
-  const nombres = { nombre: "Nombre", apellido: "Apellido", dni: "DNI" };
+  const nombres = {
+    nombre: "Nombre",
+    apellido: "Apellido",
+    dni: "DNI",
+    fecha: "Fecha",
+    tipo: "Tipo",
+    presion_arterial: "Presión arterial",
+    frecuencia_cardiaca: "Frecuencia cardíaca",
+    oxigenacion_sangre: "Oxigenación",
+  };
   throw new Error(
     `Faltan columnas en el archivo: ${faltan.map((c) => nombres[c] || c).join(", ")}.` +
       (viejo

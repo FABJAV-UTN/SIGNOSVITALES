@@ -1,7 +1,6 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import * as XLSX from "xlsx";
 import api from "../api";
-import { readExcelRows } from "../utils/excelDates";
 import { normalizarGenero, usaConvencionMF } from "../utils/genero";
 import {
   INSTRUCCIONES_PERSONA,
@@ -13,6 +12,8 @@ import {
 } from "../utils/planillaPersona";
 import ResultadoCarga from "./ResultadoCarga";
 import RevisionCarga from "./RevisionCarga";
+import SelectorArchivos from "./SelectorArchivos";
+import useArchivosExcel from "./useArchivosExcel";
 
 const ALIAS_PERSONAS = {
   genero: ["genero", "sexo", "sex"],
@@ -53,68 +54,52 @@ function descargarPlanillaModelo() {
   XLSX.writeFile(libro, "Planilla_carga_masiva_personas.xlsx");
 }
 
+/** Filas de un Excel de personas (cada archivo con sus propias columnas y convención de género). */
+function procesarPlanilla(rawRows, { date1904 }) {
+  const filteredRows = filasConDatos(rawRows);
+  const encabezados = Object.keys(rawRows[0]);
+  const keyMap = mapearColumnas(encabezados, ALIAS_PERSONAS);
+  verificarColumnas(keyMap, encabezados);
+
+  // Género: el sistema usa V (varón) / M (mujer) / No binario. Si la planilla usa la
+  // convención vieja M/F (aparece alguna "F"), ahí "M" significa masculino -> "V".
+  const legacyMF = keyMap.genero ? usaConvencionMF(filteredRows.map((r) => r[keyMap.genero])) : false;
+
+  return filteredRows.map((rawRow, i) => ({
+    fila: numeroFila(rawRow, i),
+    ...leerPersona(rawRow, keyMap, { date1904 }),
+    genero: keyMap.genero ? normalizarGenero(String(rawRow[keyMap.genero] ?? "").trim(), { legacyMF }) || null : null,
+    situacion_de_calle: keyMap.situacion_de_calle ? parseBooleanValue(rawRow[keyMap.situacion_de_calle]) : false,
+  }));
+}
+
 export default function CargaMasivaPersonas() {
-  const [fileName, setFileName] = useState("");
-  const [fileError, setFileError] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [revision, setRevision] = useState(null);
   const [resultado, setResultado] = useState(null);
+  const pedido = useRef(0);
 
-  async function revisar(data) {
+  async function revisar(combinado) {
     setError("");
+    setResultado(null);
+    setRevision(null);
+    if (!combinado) return;
+    const id = ++pedido.current;
+    const data = { rows: combinado.rows };
     setLoading(true);
     try {
       const response = await api.post("/personas/bulk/preview", data);
-      setRevision({ data, preview: response.data });
+      if (id !== pedido.current) return; // llegó otra revisión más nueva
+      setRevision({ id, data, preview: response.data, origenes: combinado.origenes, repetidas: combinado.repetidas });
     } catch (err) {
-      setError(detalleError(err, "No se pudo revisar la carga."));
+      if (id === pedido.current) setError(detalleError(err, "No se pudo revisar la carga."));
     } finally {
-      setLoading(false);
+      if (id === pedido.current) setLoading(false);
     }
   }
 
-  const handleFileChange = (event) => {
-    setFileError("");
-    setError("");
-    setRevision(null);
-    setResultado(null);
-    const file = event.target.files?.[0];
-    if (!file) return;
-    setFileName(file.name);
-
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const { rows: rawRows, date1904 } = readExcelRows(e.target.result);
-        const filteredRows = filasConDatos(rawRows);
-        if (!filteredRows.length) {
-          throw new Error("El archivo no contiene filas de datos útiles.");
-        }
-
-        const encabezados = Object.keys(rawRows[0]);
-        const keyMap = mapearColumnas(encabezados, ALIAS_PERSONAS);
-        verificarColumnas(keyMap, encabezados);
-
-        // Género: el sistema usa V (varón) / M (mujer) / No binario. Si la planilla usa la
-        // convención vieja M/F (aparece alguna "F"), ahí "M" significa masculino -> "V".
-        const legacyMF = keyMap.genero ? usaConvencionMF(filteredRows.map((r) => r[keyMap.genero])) : false;
-
-        const rows = filteredRows.map((rawRow, i) => ({
-          fila: numeroFila(rawRow, i),
-          ...leerPersona(rawRow, keyMap, { date1904 }),
-          genero: keyMap.genero ? normalizarGenero(String(rawRow[keyMap.genero] ?? "").trim(), { legacyMF }) || null : null,
-          situacion_de_calle: keyMap.situacion_de_calle ? parseBooleanValue(rawRow[keyMap.situacion_de_calle]) : false,
-        }));
-        revisar({ rows });
-      } catch (err) {
-        setFileError(err.message || "No se pudo leer el archivo Excel.");
-      }
-    };
-    reader.onerror = () => setFileError("No se pudo leer el archivo.");
-    reader.readAsArrayBuffer(file);
-    event.target.value = "";
-  };
+  const carga = useArchivosExcel(procesarPlanilla, revisar);
 
   return (
     <main className="page-shell">
@@ -123,7 +108,7 @@ export default function CargaMasivaPersonas() {
           <h1>Carga masiva de personas</h1>
         </div>
         <p>
-          Subí un Excel (.xls/.xlsx) con una fila por persona y las columnas <strong>Nombre</strong>,{" "}
+          Subí uno o varios Excel (.xls/.xlsx) con una fila por persona y las columnas <strong>Nombre</strong>,{" "}
           <strong>Apellido</strong> y <strong>DNI</strong>. Opcionales: <strong>Fecha de nacimiento</strong>,{" "}
           <strong>Género</strong> y <strong>Situación de calle</strong>.
         </p>
@@ -137,26 +122,23 @@ export default function CargaMasivaPersonas() {
             Descargar planilla modelo
           </button>
         </div>
-        <label style={{ marginTop: "1rem" }}>
-          Seleccionar archivo Excel
-          <input type="file" accept=".xls,.xlsx" onChange={handleFileChange} />
-        </label>
-        {fileName && <p>Archivo seleccionado: {fileName}</p>}
+        <SelectorArchivos carga={carga} repetidas={revision?.repetidas} />
         {loading && <p className="text-muted">Revisando...</p>}
-        {fileError && <div className="alert alert-error">{fileError}</div>}
         {error && <div className="alert alert-error">{error}</div>}
       </section>
 
       {revision && (
         <RevisionCarga
-          key={fileName + revision.preview.total_filas}
+          key={revision.id}
           data={revision.data}
           endpoint={null}
           preview={revision.preview}
+          origenes={revision.origenes}
           onCancelar={() => setRevision(null)}
           onTerminado={(res) => {
             setRevision(null);
             setResultado(res);
+            carga.limpiar(false);
           }}
         />
       )}
